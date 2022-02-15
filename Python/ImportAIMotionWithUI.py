@@ -1069,7 +1069,21 @@ def CreateJoints():
     #push 第一帧的 数据
     CurrentFrameDatas.append(DefaultTPoseFrameData) 
 
+def DuplicateJoints():
+    if not cmds.objExists(RootTransformDuplicate):
+        DuplicateObj = cmds.duplicate(RootTransformName, returnRootsOnly=True, renameChildren=True)
+        cmds.rename(DuplicateObj, RootTransformDuplicate)
 
+        #rename duplicate joint
+        def RenameChildJoint(JointParent):
+            Children = cmds.listRelatives(JointParent, children=True, type='joint')
+            if Children:
+                for Child in Children:
+                    #rename 把后面的 _tmp1去掉, 這個1是自動生成的
+                    NewName = Child[:-5]
+                    cmds.rename(Child, NewName)
+                    RenameChildJoint(NewName)
+        RenameChildJoint(RootTransformDuplicate)
 
 def GenerateTempFrameJoint(JointDatas):
     #init other pos in pelvis    
@@ -1379,7 +1393,5 @@ else:
     GenerateDebugJointFrame(DebugFrame)
 
   
-
-#根据 T-pose数据 生成关节
 
 
