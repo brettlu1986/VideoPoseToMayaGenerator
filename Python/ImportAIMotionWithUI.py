@@ -76,7 +76,7 @@ class JointData:
         return self.Scale
         
     def Display(self):
-        print 'JointData: %s, %s, %s, %s' % (self.JointName, self.Translate, self.Rotate, self.Scale)
+        print ('JointData: %s, %s, %s, %s' % (self.JointName, self.Translate, self.Rotate, self.Scale))
 
 class FrameData:
     def __init__(self, FrameIndex, JointDatas):
@@ -90,7 +90,7 @@ class FrameData:
         return self.JointDatas  
         
     def Display(self):
-        print 'FrameData: %s' % (self.FrameIndex)
+        print ('FrameData: %s' % (self.FrameIndex))
         for key in self.JointDatas:
             Joint = self.JointDatas[key]
             Joint.Display()
@@ -119,7 +119,7 @@ class SkinnedNodeData:
         return self.ParentType
         
     def Display(self):
-        print '%s parent is %s,type is %s' % (self.Name, self.Parent, self.Type)
+        print ('%s parent is %s,type is %s' % (self.Name, self.Parent, self.Type))
 
 #util functions
 def LimitAngle(Angle):
@@ -150,7 +150,7 @@ def ConvertPos3dAxisValueToMaya(CurPos):
 #ErrorMessage 
 def ErrorMessage(KeyMsg):
     cmds.confirmDialog(title='Error Message', message=ErrorMsgTypeStr[KeyMsg], button=['Ok'])
-    print "ErrorMsg: %s" % (ErrorMsgTypeStr[KeyMsg])  
+    print ("ErrorMsg: %s" % (ErrorMsgTypeStr[KeyMsg])  )
 
 #ApplyFile
 def ApplyFile(pImportField, *pArgs):
@@ -158,7 +158,7 @@ def ApplyFile(pImportField, *pArgs):
     if not File or File == '':
         ErrorMessage('FileNotNull')
         return
-    #print 'Apply File: %s' % File     
+    #print ('Apply File: %s' % File  )   
     global Pose3dData
     Pose3dData = LoadPose3dData(File)
 
@@ -174,7 +174,7 @@ def OpenImportFileDialog(pImportField, *pArgs):
    Path = cmds.fileDialog2(fileFilter='*.npz', dialogStyle=2, fileMode=1, cap='Select Import File')
    if Path:
        cmds.textField(pImportField, edit=True, text=Path[0])
-       #print 'Import From Anim File:%s '% (Path)
+       #print ('Import From Anim File:%s '% (Path))
 
 #Browse to load anim data
 def CreateImportUI(pOpenImportFileDialog, pApplyFile):
@@ -214,7 +214,7 @@ def CreateImportUI(pOpenImportFileDialog, pApplyFile):
     
     def resetToDefault(*pArgs):
         #TODO: reset to default
-        print 'clear the keys'
+        print ('clear the keys')
         #ClearKeys()
     cmds.button(label='Reset2TPose', command=resetToDefault)
     cmds.showWindow()
@@ -333,6 +333,7 @@ def CreateJoints():
         Name = SkinnNodeData.GetName()
         if not cmds.objExists(Name):
             NewNode = cmds.joint(radius = 3)
+            #cmds.joint(NewNode)
             cmds.joint(NewNode, e=True, zso=True, oj='xyz')
             cmds.rename(NewNode, Name)
 
