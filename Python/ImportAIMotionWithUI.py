@@ -12,6 +12,9 @@ import functools
 import numpy as np
 import math
 
+import maya.api.OpenMaya as OM
+from maya.api.OpenMaya import MVector, MMatrix, MPoint
+
 #Config 
 ErrorMsgTypeStr = {
     'SelectTypeWrong' : 'Current Selection in Outliner should be the jonit root.',
@@ -44,10 +47,9 @@ DefaultTPoseFrameData = None
 Pose3dData = None
 
 SkinnedNodesDatas = {}
-RootTransformName = 'SK_Male'
-RootTransformRot = [-90, 0, 0]
-PelvisRot = [90, -90, -90]
-PelvisLoc = [0, 1.056, 96.751]
+RootTransformName = 'SK_Male_tmp'
+RootTransformRot = [-90, -90, 0]
+RootTransformLoc = [0, 0, 0]
 
 #Classes
 class JointData:
@@ -102,6 +104,21 @@ class SkinnedNodeData:
         self.Parent = _ParentName
         self.ParentType = _ParentType
         self.ParentIndex = _ParentIndex
+        
+        self.JointLen = 0
+        self.PositionInTpose = [0, 0, 0]
+
+    def SetJointLength(self, NewLen):
+        self.JointLen = NewLen  
+
+    def SetPositionInTPose(self, NewPos):
+        self.PositionInTpose = NewPos 
+
+    def GetJointLength(self):
+        return self.JointLen 
+
+    def GetPositionInTPose(self):
+        return self.PositionInTpose
 
     def GetName(self):
         return self.Name
@@ -141,11 +158,12 @@ def RoundUp(n, decimals=0):
     multiplier = 10 ** decimals
     return math.ceil(n * multiplier) / multiplier
 
-def ConvertPos3dAxisValueToMaya(CurPos):
-        #curpos 右x, 上y, 从里向外z, 满足右手定则
-        #需要转成 maya里 pelvis坐标系
-        #[0], [1], [2]应该 [0], -[1], -[2]
-        return [CurPos[0] * Pose3dPoseScale, -CurPos[1] * Pose3dPoseScale, -CurPos[2] * Pose3dPoseScale]
+def ConvertPos3dRotateToMaya(JointValue):
+    NewRot = [RoundHalfUp(JointValue[3], 3) , RoundHalfUp(JointValue[4], 3), RoundHalfUp(JointValue[5], 3)]
+    return [NewRot[1], NewRot[2], NewRot[0]]
+
+def ConvertPos3dAxisValueToMaya(JointValue):
+    return [RoundHalfUp(JointValue[0], 3), RoundHalfUp(JointValue[1], 3), RoundHalfUp(JointValue[2], 3)]
 
 #ErrorMessage 
 def ErrorMessage(KeyMsg):
@@ -162,12 +180,14 @@ def ApplyFile(pImportField, *pArgs):
     global Pose3dData
     Pose3dData = LoadPose3dData(File)
 
-    #根据 T-pose生成关节
+    #创建T-pose数据
+    CreateTPoseData()
+    #根据 T-pose数据生成关节
     CreateJoints()
     #创建所有 帧数据
-    #GenerateFrameJointDatas()
+    GenerateFrameJointDatas()
     #生成关键帧，删除 tmp骨架
-    #GenerateFrames()
+    GenerateFrames()
     
 #ImportFromAnimFilePath : 直接复制文件路径进去，点击Apply， 或者Browse选择json文件
 def OpenImportFileDialog(pImportField, *pArgs):
@@ -190,7 +210,12 @@ def CreateImportUI(pOpenImportFileDialog, pApplyFile):
                                                                                                         (2, 'right', 3),
                                                                                                         (3, 'right', 3),
                                                                                                         (4, 'right', 3)])
-                                     
+    #make a space row
+    cmds.separator(h=10, style='none')
+    cmds.separator(h=10, style='none')
+    cmds.separator(h=10, style='none')
+    cmds.separator(h=10, style='none')
+
     #anim file to apply                                                                    
     cmds.text(label='AnimFile:')
     filePathField = cmds.textField(text='', width = EditFieldWidth)
@@ -209,6 +234,7 @@ def CreateImportUI(pOpenImportFileDialog, pApplyFile):
     def cancelCallBack(*pArags):
         if cmds.window(WindowId, exists=True):
             cmds.deleteUI(WindowId)
+    cmds.separator(h=10, style='none')
     cmds.separator(h=10, style='none')
     cmds.button(label='Cancel', command=cancelCallBack)
     
@@ -260,26 +286,67 @@ def ClearKeys():
 
     cmds.playbackOptions(minTime=StartFrame, maxTime=EndFrame, animationStartTime=StartFrame, animationEndTime=EndFrame)
 
+
+# SkinnedNodesDatas = {
+#         0:SkinnedNodeData('pelvis_tmp', 'joint', RootTransformName, 'transform', -1),
+#         1:SkinnedNodeData('thigh_r_tmp', 'joint', 'pelvis_tmp', 'joint', 0),
+#         2:SkinnedNodeData('calf_r_tmp', 'joint', 'thigh_r_tmp', 'joint', 1),
+#         3:SkinnedNodeData('foot_r_tmp', 'joint', 'calf_r_tmp', 'joint', 2),
+#         4:SkinnedNodeData('thigh_l_tmp', 'joint', 'pelvis_tmp', 'joint', 0),
+#         5:SkinnedNodeData('calf_l_tmp', 'joint', 'thigh_l_tmp', 'joint',4),
+#         6:SkinnedNodeData('foot_l_tmp', 'joint', 'calf_l_tmp', 'joint',5),
+#         7:SkinnedNodeData('spine_02_tmp', 'joint', 'pelvis_tmp', 'joint',0),
+#         8:SkinnedNodeData('spine_03_tmp', 'joint', 'spine_02_tmp', 'joint',7),
+#         9:SkinnedNodeData('neck_01_tmp', 'joint', 'spine_03_tmp', 'joint',8),
+#         10:SkinnedNodeData('head_tmp', 'joint', 'neck_01_tmp', 'joint',9),
+#         11:SkinnedNodeData('upperarm_l_tmp', 'joint', 'spine_03_tmp', 'joint',8),
+#         12:SkinnedNodeData('lowerarm_l_tmp', 'joint', 'upperarm_l_tmp', 'joint',11),
+#         13:SkinnedNodeData('hand_l_tmp', 'joint', 'lowerarm_l_tmp', 'joint',12),
+#         14:SkinnedNodeData('upperarm_r_tmp', 'joint', 'spine_03_tmp', 'joint',8),
+#         15:SkinnedNodeData('lowerarm_r_tmp', 'joint', 'upperarm_r_tmp', 'joint',14),
+#         16:SkinnedNodeData('hand_r_tmp', 'joint', 'lowerarm_r_tmp', 'joint',15),
+#     }
+
+# SkinnedNodesDatas = {
+#         0:SkinnedNodeData('pelvis', 'joint', RootTransformName, 'transform', -1),
+#         1:SkinnedNodeData('thigh_r', 'joint', 'pelvis', 'joint', 0),
+#         2:SkinnedNodeData('calf_r', 'joint', 'thigh_r', 'joint', 1),
+#         3:SkinnedNodeData('foot_r', 'joint', 'calf_r', 'joint', 2),
+#         4:SkinnedNodeData('thigh_l', 'joint', 'pelvis', 'joint', 0),
+#         5:SkinnedNodeData('calf_l', 'joint', 'thigh_l', 'joint',4),
+#         6:SkinnedNodeData('foot_l', 'joint', 'calf_l', 'joint',5),
+#         7:SkinnedNodeData('spine_02', 'joint', 'pelvis', 'joint',0),
+#         8:SkinnedNodeData('spine_03', 'joint', 'spine_02', 'joint',7),
+#         9:SkinnedNodeData('neck_01', 'joint', 'spine_03', 'joint',8),
+#         10:SkinnedNodeData('head', 'joint', 'neck_01', 'joint',9),
+#         11:SkinnedNodeData('upperarm_l', 'joint', 'spine_03', 'joint',8),
+#         12:SkinnedNodeData('lowerarm_l', 'joint', 'upperarm_l', 'joint',11),
+#         13:SkinnedNodeData('hand_l', 'joint', 'lowerarm_l', 'joint',12),
+#         14:SkinnedNodeData('upperarm_r', 'joint', 'spine_03', 'joint',8),
+#         15:SkinnedNodeData('lowerarm_r', 'joint', 'upperarm_r', 'joint',14),
+#         16:SkinnedNodeData('hand_r', 'joint', 'lowerarm_r', 'joint',15),
+#     }
+
 def CreateSkinnedNodes():
     global SkinnedNodesDatas
     SkinnedNodesDatas = {
-        0:SkinnedNodeData('pelvis', 'joint', RootTransformName, 'transform', -1),
-        1:SkinnedNodeData('thigh_r', 'joint', 'pelvis', 'joint', 0),
-        2:SkinnedNodeData('calf_r', 'joint', 'thigh_r', 'joint', 1),
-        3:SkinnedNodeData('foot_r', 'joint', 'calf_r', 'joint', 2),
-        4:SkinnedNodeData('thigh_l', 'joint', 'pelvis', 'joint', 0),
-        5:SkinnedNodeData('calf_l', 'joint', 'thigh_l', 'joint',4),
-        6:SkinnedNodeData('foot_l', 'joint', 'calf_l', 'joint',5),
-        7:SkinnedNodeData('spine_02', 'joint', 'pelvis', 'joint',0),
-        8:SkinnedNodeData('spine_03', 'joint', 'spine_02', 'joint',7),
-        9:SkinnedNodeData('neck_01', 'joint', 'spine_03', 'joint',8),
-        10:SkinnedNodeData('head', 'joint', 'neck_01', 'joint',9),
-        11:SkinnedNodeData('upperarm_l', 'joint', 'spine_03', 'joint',8),
-        12:SkinnedNodeData('lowerarm_l', 'joint', 'upperarm_l', 'joint',11),
-        13:SkinnedNodeData('hand_l', 'joint', 'lowerarm_l', 'joint',12),
-        14:SkinnedNodeData('upperarm_r', 'joint', 'spine_03', 'joint',8),
-        15:SkinnedNodeData('lowerarm_r', 'joint', 'upperarm_r', 'joint',14),
-        16:SkinnedNodeData('hand_r', 'joint', 'lowerarm_r', 'joint',15),
+        0:SkinnedNodeData('pelvis_tmp', 'joint', RootTransformName, 'transform', -1),
+        1:SkinnedNodeData('thigh_r_tmp', 'joint', 'pelvis_tmp', 'joint', 0),
+        2:SkinnedNodeData('calf_r_tmp', 'joint', 'thigh_r_tmp', 'joint', 1),
+        3:SkinnedNodeData('foot_r_tmp', 'joint', 'calf_r_tmp', 'joint', 2),
+        4:SkinnedNodeData('thigh_l_tmp', 'joint', 'pelvis_tmp', 'joint', 0),
+        5:SkinnedNodeData('calf_l_tmp', 'joint', 'thigh_l_tmp', 'joint',4),
+        6:SkinnedNodeData('foot_l_tmp', 'joint', 'calf_l_tmp', 'joint',5),
+        7:SkinnedNodeData('spine_02_tmp', 'joint', 'pelvis_tmp', 'joint',0),
+        8:SkinnedNodeData('spine_03_tmp', 'joint', 'spine_02_tmp', 'joint',7),
+        9:SkinnedNodeData('neck_01_tmp', 'joint', 'spine_03_tmp', 'joint',8),
+        10:SkinnedNodeData('head_tmp', 'joint', 'neck_01_tmp', 'joint',9),
+        11:SkinnedNodeData('upperarm_l_tmp', 'joint', 'spine_03_tmp', 'joint',8),
+        12:SkinnedNodeData('lowerarm_l_tmp', 'joint', 'upperarm_l_tmp', 'joint',11),
+        13:SkinnedNodeData('hand_l_tmp', 'joint', 'lowerarm_l_tmp', 'joint',12),
+        14:SkinnedNodeData('upperarm_r_tmp', 'joint', 'spine_03_tmp', 'joint',8),
+        15:SkinnedNodeData('lowerarm_r_tmp', 'joint', 'upperarm_r_tmp', 'joint',14),
+        16:SkinnedNodeData('hand_r_tmp', 'joint', 'lowerarm_r_tmp', 'joint',15),
     }
 
 def IsWishParent(Current, WishParent, WishParentType):
@@ -293,8 +360,7 @@ def LoadPose3dData(Pose3dPath):
 
     global StartFrame, EndFrame, Progress, ProgressEnd, TotalFrame
 
-    #FramesDesc = Pose3dData.shape
-    TotalFrame = 100#FramesDesc[1]
+    TotalFrame = FramesPose3d.shape[0]
 
     StartFrame = 0
     EndFrame = TotalFrame - 1
@@ -302,57 +368,97 @@ def LoadPose3dData(Pose3dPath):
     ProgressEnd = TotalFrame
     return FramesPose3d
 
-#用Pose3d里的 T-pose的数据
-def CreateJoints():
-    global Pose3dData
-    cmds.select( d=True )
+#GetTPoseJointPostion
+#根据关节长度来确定 t-pose时候的 关节坐标
+def GetTPoseJointPostion(JointIndex, JointLength):
+    if JointIndex == 1:#thigh_r
+        return [-JointLength, 0 , 0]
+    elif JointIndex == 2 or JointIndex == 3 or JointIndex == 5 or JointIndex == 6:#calf_r foot_r calf_l foot_l
+        return [0, 0, -JointLength]
+    elif JointIndex == 4:#thigh_l
+        return [JointLength, 0, 0]
+    elif JointIndex == 7 or JointIndex == 8 or JointIndex == 9 or JointIndex == 10:#spine_02 spine_03 neck_01 head
+        return [0, 0, JointLength]
+    elif JointIndex == 11 or JointIndex == 12 or JointIndex == 13:#upperarm_l lowerarm_l hand_l
+        return [JointLength, 0, 0]
+    elif JointIndex == 14 or JointIndex == 15 or JointIndex == 16:#upperarm_r lowerarm_r hand_r
+        return [-JointLength, 0, 0]
 
-    #TODO:替换pose3d里 T-pose的数据
-    JointDatas = Pose3dData[0][0]
+#CreateTPoseData
+#根据第一帧 计算关节长度， 然后创建T-pose关节数据，默认应该是相同的坐标系，并且旋转都是 0 0 0
+def CreateTPoseData():
+    global Pose3dData
+     #暂时先用 第0帧的数据来计算  t-pose 关节位置
+    JointDatas = Pose3dData[0]
+    
+    for i in range(len(JointDatas)):
+        ParentIndex = SkinnedNodesDatas[i].GetParentIndex()
+        if ParentIndex == -1:
+            SkinnedNodesDatas[i].SetJointLength(0)
+            SkinnedNodesDatas[i].SetPositionInTPose([0, 0, 0])
+        else:
+            #计算 关节的长度 
+            PointStart = ConvertPos3dAxisValueToMaya(JointDatas[ParentIndex])
+            PointEnd = ConvertPos3dAxisValueToMaya(JointDatas[i])
+
+            Len = OM.MVector(PointEnd[0] - PointStart[0],
+                             PointEnd[1] - PointStart[1],
+                             PointEnd[2] - PointStart[2]).length()
+            SkinnedNodesDatas[i].SetJointLength(Len)
+            SkinnedNodesDatas[i].SetPositionInTPose(GetTPoseJointPostion(i, Len))
+
+#CreateJoints
+#根据创建好的 T-pose数据，在maya创建 关节
+def CreateJoints():
+    #取消outliner里的选中
+    cmds.select( d=True )
 
     #create root transform
     if not cmds.objExists(RootTransformName):
         cmds.createNode("transform", name=RootTransformName)
-        cmds.setAttr('%s.rotate' % (RootTransformName), RootTransformRot[0], RootTransformRot[1], RootTransformRot[2], type="double3")
+
+    cmds.setAttr('%s.rotate' % (RootTransformName), RootTransformRot[0], RootTransformRot[1], RootTransformRot[2], type="double3")
+    cmds.setAttr('%s.translate' % (RootTransformName), RootTransformLoc[0], RootTransformLoc[1], RootTransformLoc[2], type="double3")
 
     #create pelvis
     PelvisName = SkinnedNodesDatas[0].GetName()
-    PelvisType = SkinnedNodesDatas[0].GetType()
-    Pos = ConvertPos3dAxisValueToMaya(JointDatas[0])
+    
+    #没有胯骨 先创建
     if not cmds.objExists(PelvisName):
-        NewNode = cmds.joint(position= Pos, radius = 3)
-        cmds.joint(NewNode, e=True, automaticLimits = True, zso=True, oj='xyz')
+        #默认就会创建成 上面的 RootTransform的子节点
+        NewNode = cmds.joint(radius = 3)
+        #e=True代表 Edit=True， 表示可以改变属性值， 比如 translate
+        #xyz yzx zxy zyx yxz xzy
+        cmds.joint(NewNode, e=True, automaticLimits = True, zso=True)
+        #默认创建的名字不够规范， 所以 rename一下
         cmds.rename(NewNode, PelvisName)
+        cmds.xform(PelvisName, preserve=True, rotateOrder='yxz')
 
-    cmds.setAttr('%s.translate' % (PelvisName), PelvisLoc[0], PelvisLoc[1], PelvisLoc[2], type="double3")
-    cmds.setAttr('%s.rotate' % (PelvisName), PelvisRot[0], PelvisRot[1], PelvisRot[2], type="double3") 
+    Pos = SkinnedNodesDatas[0].GetPositionInTPose()
+    cmds.setAttr('%s.translate' % (PelvisName), Pos[0], Pos[1], Pos[2], type="double3")
         
     #init other pos in pelvis    
-    for Index in range(1, len(JointDatas)):
-        SkinnNodeData = SkinnedNodesDatas[Index]
-        Name = SkinnNodeData.GetName()
-        if not cmds.objExists(Name):
-            NewNode = cmds.joint(radius = 3)
-            #cmds.joint(NewNode)
-            cmds.joint(NewNode, e=True, zso=True, oj='xyz')
-            cmds.rename(NewNode, Name)
+    for Index in SkinnedNodesDatas:
+        if Index != 0:
+            SkinnNodeData = SkinnedNodesDatas[Index]
+            Name = SkinnNodeData.GetName()
+            if not cmds.objExists(Name):
+                NewNode = cmds.joint(radius = 3)
+                #cmds.joint(NewNode)
+                cmds.joint(NewNode, e=True, zso=True)
+                cmds.rename(NewNode, Name)
+                cmds.xform(Name, preserve=True, rotateOrder='yxz')
 
-        if not IsWishParent(Name, PelvisName, PelvisType):
-            cmds.parent(Name, PelvisName)
+            if not IsWishParent(Name, SkinnNodeData.GetParent(), SkinnNodeData.GetParentType()):
+                cmds.parent(Name, SkinnNodeData.GetParent())
 
-        Pos = ConvertPos3dAxisValueToMaya(JointDatas[Index])
-        cmds.joint(Name, edit=True, relative=True, position=Pos)
-
-    #reparent to the right joint 
-    for Index in range(1, len(JointDatas)):
-        SkinnNodeData = SkinnedNodesDatas[Index]
-        if not IsWishParent(SkinnNodeData.GetName(), SkinnNodeData.GetParent(), SkinnNodeData.GetParentType()):
-            cmds.parent(SkinnNodeData.GetName(), SkinnNodeData.GetParent())
+            PosJoint = SkinnNodeData.GetPositionInTPose()
+            cmds.joint(Name, edit=True, relative=True, position=PosJoint)
 
     #generate T-pose data 
     global DefaultTPoseFrameData
     CurrentJointDatas = {}
-    for i in range(len(JointDatas)):
+    for i in SkinnedNodesDatas:
         JointName = SkinnedNodesDatas[i].GetName()
         AttrTranslate = cmds.getAttr( '%s.translate' % (JointName))
         AttrRot = cmds.getAttr( '%s.rotate' % (JointName))
@@ -378,10 +484,9 @@ def GenerateFrameJoint(JointDatas, FrameIndex):
                                            [R[0], R[1], R[2]],
                                            [S[0], S[1], S[2]])
 
-    for i in range(1, len(JointDatas)):
-
+    for i in range(len(JointDatas)):
         JointName = SkinnedNodesDatas[i].GetName()
-        TargetRotate = [ JointDatas[i][0], JointDatas[i][1], JointDatas[i][2]]
+        TargetRotate = ConvertPos3dRotateToMaya(JointDatas[i])
         FrameJointDatas[JointName].SetRotate(TargetRotate)
     
     return FrameData(FrameIndex, FrameJointDatas)
@@ -390,9 +495,10 @@ def GenerateFrameJointDatas():
     cmds.select( d=True )
     global Pose3dData, TotalFrame, CurrentFrameDatas, Progress
     Progress = 0 
-    for i in range(1, TotalFrame):
+    for i in range(TotalFrame):
         Progress += 1.0
-        JointDatas = Pose3dData[0][i]
+        print ('FrameData Progress:: %.1f%%' % (Progress / ProgressEnd * 100))
+        JointDatas = Pose3dData[i]
         Frame = GenerateFrameJoint(JointDatas, i)
         CurrentFrameDatas.append(Frame)
 
@@ -410,8 +516,13 @@ def ConstructFrame(Frame):
 def GenerateFrames():
     #清理遗留关键帧
     ClearKeys()
+
+    global Progress
+    Progress = 0 
     #generate frame key
     for Frame in CurrentFrameDatas:
+        Progress += 1.0
+        print ('AnimKey Process:: %.1f%%' % (Progress / ProgressEnd * 100))
         ConstructFrame(Frame)
 
 CreateSkinnedNodes()
