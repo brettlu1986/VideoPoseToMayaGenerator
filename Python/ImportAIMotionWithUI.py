@@ -1,10 +1,10 @@
 #ImportAiMotionWithUI
 
 '''
-1.¼ÓÔØ npz, ¸ù¾İT-pose´´½¨¹Ø½Ú
-2.ÏÈĞ´ ¶ÁÈ¡ ²¢×éÖ¯ ¹Ø¼üÖ¡Êı¾İ
-3.ÆğTimer, ´ó¸ÅÃ¿30ºÁÃë¼ÓÔØÒ»¸ö¹Ø¼üÖ¡µ½ maya
-4.»òÕß ×ßÍøÂç´«Êä
+1.åŠ è½½ npz, æ ¹æ®T-poseåˆ›å»ºå…³èŠ‚
+2.å…ˆå†™ è¯»å– å¹¶ç»„ç»‡ å…³é”®å¸§æ•°æ®
+3.èµ·Timer, å¤§æ¦‚æ¯30æ¯«ç§’åŠ è½½ä¸€ä¸ªå…³é”®å¸§åˆ° maya
+4.æˆ–è€… èµ°ç½‘ç»œä¼ è¾“
 '''
 
 import maya.cmds as cmds
@@ -33,7 +33,7 @@ NanStr = 'Nan'
 #Path EditWidth
 EditFieldWidth = 400
 
-#Í³Ò»¶ÔÆëÒ»ÏÂ¹Ø½Ú³¤¶È£¬ ¼ÙÉèpose3d×ø±êÍ³Ò»·Å´ó100±¶£¬¸ù¾İ·Å´óºóµÄÎ»ÖÃ¶Ôµ±Ç°¹Ø½Ú³¤¶ÈÍ³Ò»½øĞĞµ÷ÕûÊÊÅä
+#ç»Ÿä¸€å¯¹é½ä¸€ä¸‹å…³èŠ‚é•¿åº¦ï¼Œ å‡è®¾pose3dåæ ‡ç»Ÿä¸€æ”¾å¤§100å€ï¼Œæ ¹æ®æ”¾å¤§åçš„ä½ç½®å¯¹å½“å‰å…³èŠ‚é•¿åº¦ç»Ÿä¸€è¿›è¡Œè°ƒæ•´é€‚é…
 Pose3dPoseScale = 100
 
 StartFrame = 0
@@ -42,9 +42,11 @@ Progress = 0
 ProgressEnd = 0
 TotalFrame = 0
 
-CurrentFrameDatas = []#Ã¿Ö¡FrameÒ»Ö¡µÄ¹Ø½ÚÊı¾İ
+CurrentFrameDatas = []#æ¯å¸§Frameä¸€å¸§çš„å…³èŠ‚æ•°æ®
 DefaultTPoseFrameData = None
+
 Pose3dData = None
+Pose3dTPose = None
 
 SkinnedNodesDatas = {}
 RootTransformName = 'SK_Male'
@@ -177,19 +179,22 @@ def ApplyFile(pImportField, *pArgs):
         ErrorMessage('FileNotNull')
         return
     #print ('Apply File: %s' % File  )   
-    global Pose3dData
-    Pose3dData = LoadPose3dData(File)
+    global Pose3dData, Pose3dTPose
+    Pose3dData, Pose3dTPose = LoadPose3dData(File)
 
-    #´´½¨T-poseÊı¾İ
+    #æ ¹æ®ç¬¬ä¸€å¸§åˆ›å»ºT-poseæ•°æ®
+    #CreateTPoseDataByFirstFrame()
+
+    #æ ¹æ®npz t-poseåˆ›å»º t-poseæ•°æ®
     CreateTPoseData()
-    #¸ù¾İ T-poseÊı¾İÉú³É¹Ø½Ú
+    #æ ¹æ® T-poseæ•°æ®ç”Ÿæˆå…³èŠ‚
     CreateJoints()
-    #´´½¨ËùÓĞ Ö¡Êı¾İ
+    #åˆ›å»ºæ‰€æœ‰ å¸§æ•°æ®
     GenerateFrameJointDatas()
-    #Éú³É¹Ø¼üÖ¡£¬É¾³ı tmp¹Ç¼Ü
+    #ç”Ÿæˆå…³é”®å¸§
     GenerateFrames()
     
-#ImportFromAnimFilePath : Ö±½Ó¸´ÖÆÎÄ¼şÂ·¾¶½øÈ¥£¬µã»÷Apply£¬ »òÕßBrowseÑ¡ÔñjsonÎÄ¼ş
+#ImportFromAnimFilePath : ç›´æ¥å¤åˆ¶æ–‡ä»¶è·¯å¾„è¿›å»ï¼Œç‚¹å‡»Applyï¼Œ æˆ–è€…Browseé€‰æ‹©jsonæ–‡ä»¶
 def OpenImportFileDialog(pImportField, *pArgs):
    Path = cmds.fileDialog2(fileFilter='*.npz', dialogStyle=2, fileMode=1, cap='Select Import File')
    if Path:
@@ -266,7 +271,7 @@ def KeyJointScale(pObjectName, pKeyFrame, Scale):
     KeyJointAttribute(pObjectName, pKeyFrame, 'scaleZ', Scale[2])
 
 def ClearKeys():
-    #É¾³ıµ±Ç°Ê±¼äÏßµÄÆğÊ¼¸ú½áÊøÖ¡Êı¾İ
+    #åˆ é™¤å½“å‰æ—¶é—´çº¿çš„èµ·å§‹è·Ÿç»“æŸå¸§æ•°æ®
     StartTime = cmds.playbackOptions(query=True, minTime=True)
     EndTime = cmds.playbackOptions(query=True, maxTime=True)
     
@@ -306,6 +311,10 @@ def CreateSkinnedNodes():
         14:SkinnedNodeData('upperarm_r', 'joint', 'spine_03', 'joint', 8),
         15:SkinnedNodeData('lowerarm_r', 'joint', 'upperarm_r', 'joint', 14),
         16:SkinnedNodeData('hand_r', 'joint', 'lowerarm_r', 'joint', 15),
+        17:SkinnedNodeData('foot_l_end', 'joint', 'foot_l', 'joint', 6),
+        18:SkinnedNodeData('foot_r_end', 'joint', 'foot_r', 'joint', 3),
+        19:SkinnedNodeData('hand_l_end', 'joint', 'hand_l', 'joint', 13),
+        20:SkinnedNodeData('hand_r_end', 'joint', 'hand_r', 'joint', 16),
     }
 
 def IsWishParent(Current, WishParent, WishParentType):
@@ -315,20 +324,34 @@ def IsWishParent(Current, WishParent, WishParentType):
     return False
 
 def LoadPose3dData(Pose3dPath):
-    FramesPose3d = np.load(Pose3dPath)['frames_3d']
+    Pose3dData = np.load(Pose3dPath)
+    GroupPose3d = Pose3dData['n_frames_3d']
+    GroupTPose = Pose3dData['n_t_pose']
 
     global StartFrame, EndFrame, Progress, ProgressEnd, TotalFrame
-
-    TotalFrame = FramesPose3d.shape[0]
+    #GroupPose3d.shape:4ç»´  (å‡ ä¸ªäººï¼Œ å¸§æ•°ï¼Œ å…³èŠ‚æ•°ç›®ï¼Œ å…³èŠ‚æ•°æ®ï¼šå¹³ç§»ã€æ—‹è½¬)
+    TotalFrame = GroupPose3d.shape[1]
 
     StartFrame = 0
     EndFrame = TotalFrame - 1
     Progress = 0
     ProgressEnd = TotalFrame
-    return FramesPose3d
+    return GroupPose3d, GroupTPose
 
 #GetTPoseJointPostion
-#¸ù¾İ¹Ø½Ú³¤¶ÈÀ´È·¶¨ t-poseÊ±ºòµÄ ¹Ø½Ú×ø±ê
+#æ ¹æ®npz t-poseåˆ›å»º t-poseæ•°æ®
+def CreateTPoseData():
+    global Pose3dTPose
+
+    JointDatas = Pose3dTPose[0]
+    for i in range(len(JointDatas)):
+        Point = ConvertPos3dAxisValueToMaya(JointDatas[i])
+        Len = OM.MVector(Point[0],Point[1], Point[2]).length()
+        SkinnedNodesDatas[i].SetJointLength(Len)
+        SkinnedNodesDatas[i].SetPositionInTPose(Point)
+
+#GetTPoseJointPostion
+#æ ¹æ®å…³èŠ‚é•¿åº¦æ¥ç¡®å®š t-poseæ—¶å€™çš„ å…³èŠ‚åæ ‡
 def GetTPoseJointPostion(JointIndex, JointLength):
     if JointIndex == 1:#thigh_r
         return [-JointLength, 0 , 0]
@@ -343,11 +366,11 @@ def GetTPoseJointPostion(JointIndex, JointLength):
     elif JointIndex == 14 or JointIndex == 15 or JointIndex == 16:#upperarm_r lowerarm_r hand_r
         return [-JointLength, 0, 0]
 
-#CreateTPoseData
-#¸ù¾İµÚÒ»Ö¡ ¼ÆËã¹Ø½Ú³¤¶È£¬ È»ºó´´½¨T-pose¹Ø½ÚÊı¾İ£¬Ä¬ÈÏÓ¦¸ÃÊÇÏàÍ¬µÄ×ø±êÏµ£¬²¢ÇÒĞı×ª¶¼ÊÇ 0 0 0
-def CreateTPoseData():
+#CreateTPoseDataByFirstFrame
+#æ ¹æ®ç¬¬ä¸€å¸§ è®¡ç®—å…³èŠ‚é•¿åº¦ï¼Œ ç„¶ååˆ›å»ºT-poseå…³èŠ‚æ•°æ®ï¼Œé»˜è®¤åº”è¯¥æ˜¯ç›¸åŒçš„åæ ‡ç³»ï¼Œå¹¶ä¸”æ—‹è½¬éƒ½æ˜¯ 0 0 0
+def CreateTPoseDataByFirstFrame():
     global Pose3dData
-     #ÔİÊ±ÏÈÓÃ µÚ0Ö¡µÄÊı¾İÀ´¼ÆËã  t-pose ¹Ø½ÚÎ»ÖÃ
+     #æš‚æ—¶å…ˆç”¨ ç¬¬0å¸§çš„æ•°æ®æ¥è®¡ç®—  t-pose å…³èŠ‚ä½ç½®
     JointDatas = Pose3dData[0]
     
     for i in range(len(JointDatas)):
@@ -356,7 +379,7 @@ def CreateTPoseData():
             SkinnedNodesDatas[i].SetJointLength(0)
             SkinnedNodesDatas[i].SetPositionInTPose([0, 0, 0])
         else:
-            #¼ÆËã ¹Ø½ÚµÄ³¤¶È 
+            #è®¡ç®— å…³èŠ‚çš„é•¿åº¦ 
             PointStart = ConvertPos3dAxisValueToMaya(JointDatas[ParentIndex])
             PointEnd = ConvertPos3dAxisValueToMaya(JointDatas[i])
 
@@ -367,9 +390,9 @@ def CreateTPoseData():
             SkinnedNodesDatas[i].SetPositionInTPose(GetTPoseJointPostion(i, Len))
 
 #CreateJoints
-#¸ù¾İ´´½¨ºÃµÄ T-poseÊı¾İ£¬ÔÚmaya´´½¨ ¹Ø½Ú
+#æ ¹æ®åˆ›å»ºå¥½çš„ T-poseæ•°æ®ï¼Œåœ¨mayaåˆ›å»º å…³èŠ‚
 def CreateJoints():
-    #È¡ÏûoutlinerÀïµÄÑ¡ÖĞ
+    #å–æ¶ˆoutlineré‡Œçš„é€‰ä¸­
     cmds.select( d=True )
 
     #create root transform
@@ -382,13 +405,13 @@ def CreateJoints():
     #create pelvis
     PelvisName = SkinnedNodesDatas[0].GetName()
     
-    #Ã»ÓĞ¿è¹Ç ÏÈ´´½¨
+    #æ²¡æœ‰ç›†éª¨ å…ˆåˆ›å»º
     if not cmds.objExists(PelvisName):
-        #Ä¬ÈÏ¾Í»á´´½¨³É ÉÏÃæµÄ RootTransformµÄ×Ó½Úµã
+        #é»˜è®¤å°±ä¼šåˆ›å»ºæˆ ä¸Šé¢çš„ RootTransformçš„å­èŠ‚ç‚¹
         NewNode = cmds.joint(radius = 3)
-        #e=True´ú±í Edit=True£¬ ±íÊ¾¿ÉÒÔ¸Ä±äÊôĞÔÖµ£¬ ±ÈÈç translate
+        #e=Trueä»£è¡¨ Edit=Trueï¼Œ è¡¨ç¤ºå¯ä»¥æ”¹å˜å±æ€§å€¼ï¼Œ æ¯”å¦‚ translate
         cmds.joint(NewNode, e=True, automaticLimits = True, zso=True)
-        #Ä¬ÈÏ´´½¨µÄÃû×Ö²»¹»¹æ·¶£¬ ËùÒÔ renameÒ»ÏÂ
+        #é»˜è®¤åˆ›å»ºçš„åå­—ä¸å¤Ÿè§„èŒƒï¼Œ æ‰€ä»¥ renameä¸€ä¸‹
         cmds.rename(NewNode, PelvisName)
         cmds.xform(PelvisName, preserve=True, rotateOrder='yxz')
 
@@ -442,6 +465,7 @@ def GenerateFrameJoint(JointDatas, FrameIndex):
                                            [R[0], R[1], R[2]],
                                            [S[0], S[1], S[2]])
 
+    #TODO: å°†æ¥å¦‚æœéœ€è¦æ”¯æŒRootMotionåœ¨è¿™é‡Œ éœ€è¦åˆ¤æ–­ä¸€ä¸‹ï¼ŒæŠŠ JointDatas[0]å•ç‹¬æ‹¿å‡ºæ¥ï¼Œå°†translateçš„å…³é”®å¸§ SetTranslateåŠ è¿›å»
     for i in range(len(JointDatas)):
         JointName = SkinnedNodesDatas[i].GetName()
         TargetRotate = ConvertPos3dRotateToMaya(JointDatas[i])
@@ -456,7 +480,7 @@ def GenerateFrameJointDatas():
     for i in range(TotalFrame):
         Progress += 1.0
         print ('FrameData Progress:: %.1f%%' % (Progress / ProgressEnd * 100))
-        JointDatas = Pose3dData[i]
+        JointDatas = Pose3dData[0][i]
         Frame = GenerateFrameJoint(JointDatas, i)
         CurrentFrameDatas.append(Frame)
 
@@ -472,7 +496,7 @@ def ConstructFrame(Frame):
             KeyJointScale(JointName, FrameIndex, Joint.GetScale())
 
 def GenerateFrames():
-    #ÇåÀíÒÅÁô¹Ø¼üÖ¡
+    #æ¸…ç†é—ç•™å…³é”®å¸§
     ClearKeys()
 
     global Progress
