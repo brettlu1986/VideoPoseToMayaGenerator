@@ -47,7 +47,7 @@ DefaultTPoseFrameData = None
 Pose3dData = None
 
 SkinnedNodesDatas = {}
-RootTransformName = 'SK_Male_tmp'
+RootTransformName = 'SK_Male'
 RootTransformRot = [-90, -90, 0]
 RootTransformLoc = [0, 0, 0]
 
@@ -286,67 +286,26 @@ def ClearKeys():
 
     cmds.playbackOptions(minTime=StartFrame, maxTime=EndFrame, animationStartTime=StartFrame, animationEndTime=EndFrame)
 
-
-# SkinnedNodesDatas = {
-#         0:SkinnedNodeData('pelvis_tmp', 'joint', RootTransformName, 'transform', -1),
-#         1:SkinnedNodeData('thigh_r_tmp', 'joint', 'pelvis_tmp', 'joint', 0),
-#         2:SkinnedNodeData('calf_r_tmp', 'joint', 'thigh_r_tmp', 'joint', 1),
-#         3:SkinnedNodeData('foot_r_tmp', 'joint', 'calf_r_tmp', 'joint', 2),
-#         4:SkinnedNodeData('thigh_l_tmp', 'joint', 'pelvis_tmp', 'joint', 0),
-#         5:SkinnedNodeData('calf_l_tmp', 'joint', 'thigh_l_tmp', 'joint',4),
-#         6:SkinnedNodeData('foot_l_tmp', 'joint', 'calf_l_tmp', 'joint',5),
-#         7:SkinnedNodeData('spine_02_tmp', 'joint', 'pelvis_tmp', 'joint',0),
-#         8:SkinnedNodeData('spine_03_tmp', 'joint', 'spine_02_tmp', 'joint',7),
-#         9:SkinnedNodeData('neck_01_tmp', 'joint', 'spine_03_tmp', 'joint',8),
-#         10:SkinnedNodeData('head_tmp', 'joint', 'neck_01_tmp', 'joint',9),
-#         11:SkinnedNodeData('upperarm_l_tmp', 'joint', 'spine_03_tmp', 'joint',8),
-#         12:SkinnedNodeData('lowerarm_l_tmp', 'joint', 'upperarm_l_tmp', 'joint',11),
-#         13:SkinnedNodeData('hand_l_tmp', 'joint', 'lowerarm_l_tmp', 'joint',12),
-#         14:SkinnedNodeData('upperarm_r_tmp', 'joint', 'spine_03_tmp', 'joint',8),
-#         15:SkinnedNodeData('lowerarm_r_tmp', 'joint', 'upperarm_r_tmp', 'joint',14),
-#         16:SkinnedNodeData('hand_r_tmp', 'joint', 'lowerarm_r_tmp', 'joint',15),
-#     }
-
-# SkinnedNodesDatas = {
-#         0:SkinnedNodeData('pelvis', 'joint', RootTransformName, 'transform', -1),
-#         1:SkinnedNodeData('thigh_r', 'joint', 'pelvis', 'joint', 0),
-#         2:SkinnedNodeData('calf_r', 'joint', 'thigh_r', 'joint', 1),
-#         3:SkinnedNodeData('foot_r', 'joint', 'calf_r', 'joint', 2),
-#         4:SkinnedNodeData('thigh_l', 'joint', 'pelvis', 'joint', 0),
-#         5:SkinnedNodeData('calf_l', 'joint', 'thigh_l', 'joint',4),
-#         6:SkinnedNodeData('foot_l', 'joint', 'calf_l', 'joint',5),
-#         7:SkinnedNodeData('spine_02', 'joint', 'pelvis', 'joint',0),
-#         8:SkinnedNodeData('spine_03', 'joint', 'spine_02', 'joint',7),
-#         9:SkinnedNodeData('neck_01', 'joint', 'spine_03', 'joint',8),
-#         10:SkinnedNodeData('head', 'joint', 'neck_01', 'joint',9),
-#         11:SkinnedNodeData('upperarm_l', 'joint', 'spine_03', 'joint',8),
-#         12:SkinnedNodeData('lowerarm_l', 'joint', 'upperarm_l', 'joint',11),
-#         13:SkinnedNodeData('hand_l', 'joint', 'lowerarm_l', 'joint',12),
-#         14:SkinnedNodeData('upperarm_r', 'joint', 'spine_03', 'joint',8),
-#         15:SkinnedNodeData('lowerarm_r', 'joint', 'upperarm_r', 'joint',14),
-#         16:SkinnedNodeData('hand_r', 'joint', 'lowerarm_r', 'joint',15),
-#     }
-
 def CreateSkinnedNodes():
     global SkinnedNodesDatas
     SkinnedNodesDatas = {
-        0:SkinnedNodeData('pelvis_tmp', 'joint', RootTransformName, 'transform', -1),
-        1:SkinnedNodeData('thigh_r_tmp', 'joint', 'pelvis_tmp', 'joint', 0),
-        2:SkinnedNodeData('calf_r_tmp', 'joint', 'thigh_r_tmp', 'joint', 1),
-        3:SkinnedNodeData('foot_r_tmp', 'joint', 'calf_r_tmp', 'joint', 2),
-        4:SkinnedNodeData('thigh_l_tmp', 'joint', 'pelvis_tmp', 'joint', 0),
-        5:SkinnedNodeData('calf_l_tmp', 'joint', 'thigh_l_tmp', 'joint',4),
-        6:SkinnedNodeData('foot_l_tmp', 'joint', 'calf_l_tmp', 'joint',5),
-        7:SkinnedNodeData('spine_02_tmp', 'joint', 'pelvis_tmp', 'joint',0),
-        8:SkinnedNodeData('spine_03_tmp', 'joint', 'spine_02_tmp', 'joint',7),
-        9:SkinnedNodeData('neck_01_tmp', 'joint', 'spine_03_tmp', 'joint',8),
-        10:SkinnedNodeData('head_tmp', 'joint', 'neck_01_tmp', 'joint',9),
-        11:SkinnedNodeData('upperarm_l_tmp', 'joint', 'spine_03_tmp', 'joint',8),
-        12:SkinnedNodeData('lowerarm_l_tmp', 'joint', 'upperarm_l_tmp', 'joint',11),
-        13:SkinnedNodeData('hand_l_tmp', 'joint', 'lowerarm_l_tmp', 'joint',12),
-        14:SkinnedNodeData('upperarm_r_tmp', 'joint', 'spine_03_tmp', 'joint',8),
-        15:SkinnedNodeData('lowerarm_r_tmp', 'joint', 'upperarm_r_tmp', 'joint',14),
-        16:SkinnedNodeData('hand_r_tmp', 'joint', 'lowerarm_r_tmp', 'joint',15),
+        0:SkinnedNodeData('pelvis', 'joint', RootTransformName, 'transform', -1),
+        1:SkinnedNodeData('thigh_r', 'joint', 'pelvis', 'joint', 0),
+        2:SkinnedNodeData('calf_r', 'joint', 'thigh_r', 'joint', 1),
+        3:SkinnedNodeData('foot_r', 'joint', 'calf_r', 'joint', 2),
+        4:SkinnedNodeData('thigh_l', 'joint', 'pelvis', 'joint', 0),
+        5:SkinnedNodeData('calf_l', 'joint', 'thigh_l', 'joint', 4),
+        6:SkinnedNodeData('foot_l', 'joint', 'calf_l', 'joint', 5),
+        7:SkinnedNodeData('spine_02', 'joint', 'pelvis', 'joint', 0),
+        8:SkinnedNodeData('spine_03', 'joint', 'spine_02', 'joint', 7),
+        9:SkinnedNodeData('neck_01', 'joint', 'spine_03', 'joint', 8),
+        10:SkinnedNodeData('head', 'joint', 'neck_01', 'joint', 9),
+        11:SkinnedNodeData('upperarm_l', 'joint', 'spine_03', 'joint', 8),
+        12:SkinnedNodeData('lowerarm_l', 'joint', 'upperarm_l', 'joint', 11),
+        13:SkinnedNodeData('hand_l', 'joint', 'lowerarm_l', 'joint', 12),
+        14:SkinnedNodeData('upperarm_r', 'joint', 'spine_03', 'joint', 8),
+        15:SkinnedNodeData('lowerarm_r', 'joint', 'upperarm_r', 'joint', 14),
+        16:SkinnedNodeData('hand_r', 'joint', 'lowerarm_r', 'joint', 15),
     }
 
 def IsWishParent(Current, WishParent, WishParentType):
@@ -428,7 +387,6 @@ def CreateJoints():
         #默认就会创建成 上面的 RootTransform的子节点
         NewNode = cmds.joint(radius = 3)
         #e=True代表 Edit=True， 表示可以改变属性值， 比如 translate
-        #xyz yzx zxy zyx yxz xzy
         cmds.joint(NewNode, e=True, automaticLimits = True, zso=True)
         #默认创建的名字不够规范， 所以 rename一下
         cmds.rename(NewNode, PelvisName)
