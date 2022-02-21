@@ -24,6 +24,8 @@ import math
 import maya.api.OpenMaya as OM
 from maya.api.OpenMaya import MVector, MMatrix, MPoint
 
+
+
 #Config 
 ErrorMsgTypeStr = {
     'SelectTypeWrong' : 'Current Selection in Outliner should be the jonit root.',
@@ -33,6 +35,26 @@ ErrorMsgTypeStr = {
     'ShouldSameSize': 'Current Joints Size should same as Parent Joints Size.',
     'ShouldHaveFormatName' : 'Should Have Format Name'
 }
+
+DefaultTposeDataFile = 'D:/Projects/AI/VideoPoseToMayaGenerator/Pose3dNPZ_Files/pose_meixi_standard_1s.npz'
+ListenPort = 7001
+
+StartFrame = 0
+EndFrame = 0
+Progress = 0
+ProgressEnd = 0
+TotalFrame = 0
+
+CurrentFrameDatas = []#每帧Frame一帧的关节数据
+DefaultTPoseFrameData = None
+
+Pose3dData = None
+Pose3dTPose = None
+
+SkinnedNodesDatas = {}
+RootTransformName = 'SK_Male'
+RootTransformRot = [-90, -90, 0]
+RootTransformLoc = [0, 0, 0]
 
 #Classes
 class JointData:
@@ -67,7 +89,7 @@ class FrameData:
     def __init__(self, FrameIndex, JointDatas):
         self.FrameIndex = FrameIndex 
         self.JointDatas = JointDatas
-    
+
     def GetFrameIndex(self):
         return self.FrameIndex
         
@@ -130,26 +152,34 @@ class ImportAIMotionWithUI(object):
         #Path EditWidth
         self.EditFieldWidth = 400
 
-        self.StartFrame = 0
-        self.EndFrame = 0
-        self.Progress = 0
-        self.ProgressEnd = 0
-        self.TotalFrame = 0
 
-        self.CurrentFrameDatas = []#每帧Frame一帧的关节数据
-        self.DefaultTPoseFrameData = None
-
-        self.Pose3dData = None
-        self.Pose3dTPose = None
-
-        self.SkinnedNodesDatas = {}
-        self.RootTransformName = 'SK_Male'
-        self.RootTransformRot = [-90, -90, 0]
-        self.RootTransformLoc = [0, 0, 0]
-
-    def Initialize(self):
+    def WorkOffLine(self):
+        print('work offline!')
         self.CreateSkinnedNodes()
         self.CreateImportUI(self.OpenImportFileDialog, self.ApplyFile)
+    
+
+    def AddFrameData(self, FrameIndex, FrameData):
+        FrameJointDatas = FrameData[0][0]
+
+        Frame = self.GenerateFrameJoint(FrameJointDatas, FrameIndex)
+        self.ConstructFrame(Frame)
+        CurrentFrameDatas.append(Frame)
+        
+       # print('Frame %d %s' % (FrameIndex, JointDatas[0]))
+
+    def WorkRealTime(self):
+        global Pose3dData, Pose3dTPose
+        self.CreateSkinnedNodes()
+        Pose3dData, Pose3dTPose = self.LoadPose3dData(DefaultTposeDataFile)
+        #根据npz t-pose创建 t-pose数据
+        self.CreateTPoseData()
+        #根据 T-pose数据生成关节
+        self.CreateJoints()
+        #清理帧， 防止之前残留
+        self.ClearKeys()
+
+        self.ListenToFrameData()
 
     #util functions
     def LimitAngle(self, Angle):
@@ -190,7 +220,8 @@ class ImportAIMotionWithUI(object):
             self.ErrorMessage('FileNotNull')
             return
         #print ('Apply File: %s' % File  )   
-        self.Pose3dData, self.Pose3dTPose = self.LoadPose3dData(File)
+        global Pose3dData, Pose3dTPose
+        Pose3dData, Pose3dTPose = self.LoadPose3dData(File)
 
         #根据第一帧创建T-pose数据
         #CreateTPoseDataByFirstFrame()
@@ -285,8 +316,9 @@ class ImportAIMotionWithUI(object):
         StartTime = cmds.playbackOptions(query=True, minTime=True)
         EndTime = cmds.playbackOptions(query=True, maxTime=True)
         
-        for DataIndex in self.SkinnedNodesDatas:
-            JointName = self.SkinnedNodesDatas[DataIndex].GetName()
+        global SkinnedNodesDatas
+        for DataIndex in SkinnedNodesDatas:
+            JointName = SkinnedNodesDatas[DataIndex].GetName()
             cmds.cutKey(JointName, time=(StartTime, EndTime), attribute='translateX')
             cmds.cutKey(JointName, time=(StartTime, EndTime), attribute='translateY')
             cmds.cutKey(JointName, time=(StartTime, EndTime), attribute='translateZ')
@@ -299,11 +331,12 @@ class ImportAIMotionWithUI(object):
             cmds.cutKey(JointName, time=(StartTime, EndTime), attribute='scaleY')
             cmds.cutKey(JointName, time=(StartTime, EndTime), attribute='scaleZ')
 
-        cmds.playbackOptions(minTime=self.StartFrame, maxTime=self.EndFrame, animationStartTime=self.StartFrame, animationEndTime=self.EndFrame)
+        cmds.playbackOptions(minTime=StartFrame, maxTime=EndFrame, animationStartTime=StartFrame, animationEndTime=EndFrame)
 
     def CreateSkinnedNodes(self):
-        self.SkinnedNodesDatas = {
-            0:SkinnedNodeData('pelvis', 'joint', self.RootTransformName, 'transform', -1),
+        global SkinnedNodesDatas
+        SkinnedNodesDatas = {
+            0:SkinnedNodeData('pelvis', 'joint', RootTransformName, 'transform', -1),
             1:SkinnedNodeData('thigh_r', 'joint', 'pelvis', 'joint', 0),
             2:SkinnedNodeData('calf_r', 'joint', 'thigh_r', 'joint', 1),
             3:SkinnedNodeData('foot_r', 'joint', 'calf_r', 'joint', 2),
@@ -337,24 +370,25 @@ class ImportAIMotionWithUI(object):
         GroupPose3d = Pose3dNpz['n_frames_3d']
         GroupTPose = Pose3dNpz['n_t_pose']
 
+        global StartFrame, EndFrame, Progress, ProgressEnd, TotalFrame
         #GroupPose3d.shape:4维  (几个人， 帧数， 关节数目， 关节数据：平移、旋转)
-        self.TotalFrame = GroupPose3d.shape[1]
+        TotalFrame = GroupPose3d.shape[1]
 
-        self.StartFrame = 0
-        self.EndFrame = self.TotalFrame - 1
-        self.Progress = 0
-        self.ProgressEnd = self.TotalFrame
+        StartFrame = 0
+        EndFrame = TotalFrame - 1
+        Progress = 0
+        ProgressEnd = TotalFrame
         return GroupPose3d, GroupTPose
 
     #CreateTPoseData
     #根据npz t-pose创建 t-pose数据
     def CreateTPoseData(self):
-        JointDatas = self.Pose3dTPose[0]
+        JointDatas = Pose3dTPose[0]
         for i in range(len(JointDatas)):
             Point = self.ConvertPos3dAxisValueToMaya(JointDatas[i])
             Len = OM.MVector(Point[0],Point[1], Point[2]).length()
-            self.SkinnedNodesDatas[i].SetJointLength(Len)
-            self.SkinnedNodesDatas[i].SetPositionInTPose(Point)
+            SkinnedNodesDatas[i].SetJointLength(Len)
+            SkinnedNodesDatas[i].SetPositionInTPose(Point)
 
     #GetTPoseJointPostion
     #根据关节长度来确定 t-pose时候的 关节坐标
@@ -376,13 +410,13 @@ class ImportAIMotionWithUI(object):
     #根据第一帧 计算关节长度， 然后创建T-pose关节数据，默认应该是相同的坐标系，并且旋转都是 0 0 0
     def CreateTPoseDataByFirstFrame(self):
         #暂时先用 第0帧的数据来计算  t-pose 关节位置
-        JointDatas = self.Pose3dData[0]
+        JointDatas = Pose3dData[0]
         
         for i in range(len(JointDatas)):
-            ParentIndex = self.SkinnedNodesDatas[i].GetParentIndex()
+            ParentIndex = SkinnedNodesDatas[i].GetParentIndex()
             if ParentIndex == -1:
-                self.SkinnedNodesDatas[i].SetJointLength(0)
-                self.SkinnedNodesDatas[i].SetPositionInTPose([0, 0, 0])
+                SkinnedNodesDatas[i].SetJointLength(0)
+                SkinnedNodesDatas[i].SetPositionInTPose([0, 0, 0])
             else:
                 #计算 关节的长度  
                 PointStart = self.ConvertPos3dAxisValueToMaya(JointDatas[ParentIndex])
@@ -391,24 +425,24 @@ class ImportAIMotionWithUI(object):
                 Len = OM.MVector(PointEnd[0] - PointStart[0],
                                 PointEnd[1] - PointStart[1],
                                 PointEnd[2] - PointStart[2]).length()
-                self.SkinnedNodesDatas[i].SetJointLength(Len)
-                self.SkinnedNodesDatas[i].SetPositionInTPose(self.GetTPoseJointPostion(i, Len))
+                SkinnedNodesDatas[i].SetJointLength(Len)
+                SkinnedNodesDatas[i].SetPositionInTPose(self.GetTPoseJointPostion(i, Len))
 
     #CreateJoints
     #根据创建好的 T-pose数据，在maya创建 关节
     def CreateJoints(self):
-        #ȡ��outliner���ѡ��
+        #取消Outliner选中
         cmds.select( d=True )
 
         #create root transform
-        if not cmds.objExists(self.RootTransformName):
-            cmds.createNode("transform", name=self.RootTransformName)
+        if not cmds.objExists(RootTransformName):
+            cmds.createNode("transform", name=RootTransformName)
 
-        cmds.setAttr('%s.rotate' % (self.RootTransformName), self.RootTransformRot[0], self.RootTransformRot[1], self.RootTransformRot[2], type="double3")
-        cmds.setAttr('%s.translate' % (self.RootTransformName), self.RootTransformLoc[0], self.RootTransformLoc[1], self.RootTransformLoc[2], type="double3")
+        cmds.setAttr('%s.rotate' % (RootTransformName), RootTransformRot[0], RootTransformRot[1], RootTransformRot[2], type="double3")
+        cmds.setAttr('%s.translate' % (RootTransformName), RootTransformLoc[0], RootTransformLoc[1], RootTransformLoc[2], type="double3")
 
         #create pelvis
-        PelvisName = self.SkinnedNodesDatas[0].GetName()
+        PelvisName = SkinnedNodesDatas[0].GetName()
         
         #没有盆骨 先创建
         if not cmds.objExists(PelvisName):
@@ -420,13 +454,13 @@ class ImportAIMotionWithUI(object):
             cmds.rename(NewNode, PelvisName)
             cmds.xform(PelvisName, preserve=True, rotateOrder='yxz')
 
-        Pos = self.SkinnedNodesDatas[0].GetPositionInTPose()
+        Pos = SkinnedNodesDatas[0].GetPositionInTPose()
         cmds.setAttr('%s.translate' % (PelvisName), Pos[0], Pos[1], Pos[2], type="double3")
             
         #init other pos in pelvis    
-        for Index in self.SkinnedNodesDatas:
+        for Index in SkinnedNodesDatas:
             if Index != 0:
-                SkinnNodeData = self.SkinnedNodesDatas[Index]
+                SkinnNodeData = SkinnedNodesDatas[Index]
                 Name = SkinnNodeData.GetName()
                 if not cmds.objExists(Name):
                     NewNode = cmds.joint(radius = 3)
@@ -442,9 +476,10 @@ class ImportAIMotionWithUI(object):
                 cmds.joint(Name, edit=True, relative=True, position=PosJoint)
 
         #generate T-pose data 
+        global DefaultTPoseFrameData
         CurrentJointDatas = {}
-        for i in self.SkinnedNodesDatas:
-            JointName = self.SkinnedNodesDatas[i].GetName()
+        for i in SkinnedNodesDatas:
+            JointName = SkinnedNodesDatas[i].GetName()
             AttrTranslate = cmds.getAttr( '%s.translate' % (JointName))
             AttrRot = cmds.getAttr( '%s.rotate' % (JointName))
             AttScale = cmds.getAttr( '%s.scale' % (JointName))
@@ -455,12 +490,13 @@ class ImportAIMotionWithUI(object):
                             [AttScale[0][0],      AttScale[0][1],      AttScale[0][2]],
                             )
             CurrentJointDatas[JointName] = Joint
-        self.DefaultTPoseFrameData = FrameData(-1, CurrentJointDatas)
+        DefaultTPoseFrameData = FrameData(-1, CurrentJointDatas)
 
     def GenerateFrameJoint(self, JointDatas, FrameIndex):          
         FrameJointDatas = {}
+        global DefaultTPoseFrameData
         #init to default t-pose first
-        DefaultJointDatas = self.DefaultTPoseFrameData.GetJointDatas()
+        DefaultJointDatas = DefaultTPoseFrameData.GetJointDatas()
         for Name in DefaultJointDatas:
             T = DefaultJointDatas[Name].GetTranslate()
             R = DefaultJointDatas[Name].GetRotate()
@@ -471,21 +507,23 @@ class ImportAIMotionWithUI(object):
 
         #TODO: 将来如果需要支持RootMotion在这里 需要判断一下，把 JointDatas[0]单独拿出来，将translate的关键帧 SetTranslate加进去
         for i in range(len(JointDatas)):
-            JointName = self.SkinnedNodesDatas[i].GetName()
+            JointName = SkinnedNodesDatas[i].GetName()
             TargetRotate = self.ConvertPos3dRotateToMaya(JointDatas[i])
             FrameJointDatas[JointName].SetRotate(TargetRotate)
         
         return FrameData(FrameIndex, FrameJointDatas)
 
     def GenerateFrameJointDatas(self):
+        global Progress, ProgressEnd, TotalFrame, CurrentFrameDatas
         cmds.select( d=True )
-        self.Progress = 0 
-        for i in range(self.TotalFrame):
-            self.Progress += 1.0
-            print ('FrameData Progress:: %.1f%%' % (self.Progress / self.ProgressEnd * 100))
-            JointDatas = self.Pose3dData[0][i]
+        Progress = 0 
+        CurrentFrameDatas = []
+        for i in range(TotalFrame):
+            Progress += 1.0
+            print ('FrameData Progress:: %.1f%%' % (Progress / ProgressEnd * 100))
+            JointDatas = Pose3dData[0][i]
             Frame = self.GenerateFrameJoint(JointDatas, i)
-            self.CurrentFrameDatas.append(Frame)
+            CurrentFrameDatas.append(Frame)
 
     def ConstructFrame(self, Frame):
         FrameIndex = Frame.GetFrameIndex()  
@@ -502,16 +540,28 @@ class ImportAIMotionWithUI(object):
         #清理遗留关键帧
         self.ClearKeys()
 
-        self.Progress = 0 
+        global Progress, ProgressEnd, CurrentFrameDatas
+        Progress = 0 
         #generate frame key
-        for Frame in self.CurrentFrameDatas:
-            self.Progress += 1.0
-            print ('AnimKey Process:: %.1f%%' % (self.Progress / self.ProgressEnd * 100))
+        for Frame in CurrentFrameDatas:
+            Progress += 1.0
+            print ('AnimKey Process:: %.1f%%' % (Progress / ProgressEnd * 100))
             self.ConstructFrame(Frame)
+
+    def ListenToFrameData(self):
+        PyPortStr = ':%s'%(ListenPort)
+        if not cmds.commandPort( PyPortStr, q = True):
+            cmds.commandPort(n = PyPortStr, stp = 'python')
+
+        MelPortStr = ':%s'%(ListenPort + 1)
+        if not cmds.commandPort( MelPortStr, q = True):
+            cmds.commandPort(n = MelPortStr, stp = 'mel')
+
+        print('Listen to frame Data')
 
 
 if __name__ == "__main__":
-	dialog = ImportAIMotionWithUI()
+    dialog = ImportAIMotionWithUI()
 
 
 
