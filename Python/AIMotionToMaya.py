@@ -28,12 +28,8 @@ from maya.api.OpenMaya import MVector, MMatrix, MPoint
 
 #Config 
 ErrorMsgTypeStr = {
-    'SelectTypeWrong' : 'Current Selection in Outliner should be the jonit root.',
     'FileNotNull' : 'Dir or File path should not be null.',
-    'LoadDefaultT-PoseError' : 'To Load T-Pose, we must select root joint and load T-Pose first',
-    'WrongJointFormat' : 'Pose3d joint index map to skeletal joint name fail',
-    'ShouldSameSize': 'Current Joints Size should same as Parent Joints Size.',
-    'ShouldHaveFormatName' : 'Should Have Format Name'
+    'LoadDefaultT-PoseError' : 'To Load T-Pose, we must import .npz file first.',
 }
 
 DefaultTposeDataFile = 'D:/Projects/AI/VideoPoseToMayaGenerator/Pose3dNPZ_Files/pose_meixi_standard_1s.npz'
@@ -48,8 +44,8 @@ TotalFrame = 0
 CurrentFrameDatas = []#每帧Frame一帧的关节数据
 DefaultTPoseFrameData = None
 
-Pose3dData = None
-Pose3dTPose = None
+Pose3dData = np.array([])
+Pose3dTPose = np.array([])
 
 SkinnedNodesDatas = {}
 RootTransformName = 'SK_Male'
@@ -150,14 +146,25 @@ class ImportAIMotionWithUI(object):
         self.WindowTitle = 'ImportAnimUI'
 
         #Path EditWidth
-        self.EditFieldWidth = 400
+        self.EditFieldWidth = 300
+        self.ListenButton = None 
+        self.ListenButtonColor = [.361,.361,.361]
+        self.ListeningColor = [0,1,0]
 
 
-    def WorkOffLine(self):
-        print('work offline!')
+    def CheckPyConnectState(self):
+        PyPortStr = ':%s'%(ListenPort)
+        bConnected = cmds.commandPort( PyPortStr, q = True)
+        if bConnected:
+            cmds.button(self.ListenButton, label='Connected', edit=True, backgroundColor=self.ListeningColor)
+        else: 
+            cmds.button(self.ListenButton, label='CreateConnection', edit=True, backgroundColor=self.ListenButtonColor)
+
+    def Run(self):
         self.CreateSkinnedNodes()
-        self.CreateImportUI(self.OpenImportFileDialog, self.ApplyFile)
-    
+        self.CreateImportUI(self.OpenImportFileDialog, self.ApplyFile, self.OpenImportTPoseFileDialog, self.ApplyTPoseFile)
+        self.CheckPyConnectState()
+
 
     def AddFrameData(self, FrameIndex, FrameData):
         FrameJointDatas = FrameData[0][0]
@@ -165,21 +172,6 @@ class ImportAIMotionWithUI(object):
         Frame = self.GenerateFrameJoint(FrameJointDatas, FrameIndex)
         self.ConstructFrame(Frame)
         CurrentFrameDatas.append(Frame)
-        
-       # print('Frame %d %s' % (FrameIndex, JointDatas[0]))
-
-    def WorkRealTime(self):
-        global Pose3dData, Pose3dTPose
-        self.CreateSkinnedNodes()
-        Pose3dData, Pose3dTPose = self.LoadPose3dData(DefaultTposeDataFile)
-        #根据npz t-pose创建 t-pose数据
-        self.CreateTPoseData()
-        #根据 T-pose数据生成关节
-        self.CreateJoints()
-        #清理帧， 防止之前残留
-        self.ClearKeys()
-
-        self.ListenToFrameData()
 
     #util functions
     def LimitAngle(self, Angle):
@@ -223,9 +215,6 @@ class ImportAIMotionWithUI(object):
         global Pose3dData, Pose3dTPose
         Pose3dData, Pose3dTPose = self.LoadPose3dData(File)
 
-        #根据第一帧创建T-pose数据
-        #CreateTPoseDataByFirstFrame()
-
         #根据npz t-pose创建 t-pose数据
         self.CreateTPoseData()
         #根据 T-pose数据生成关节
@@ -234,34 +223,59 @@ class ImportAIMotionWithUI(object):
         self.GenerateFrameJointDatas()
         #生成关键帧
         self.GenerateFrames()
+
+    #ApplyTPoseFile
+    def ApplyTPoseFile(self, pImportField, *pArgs):
+        File = cmds.textField(pImportField, query=True, text=True)
+        if not File or File == '':
+            self.ErrorMessage('FileNotNull')
+            return
+
+        global Pose3dData, Pose3dTPose
+        Pose3dData, Pose3dTPose = self.LoadPose3dData(File)
+        #根据npz t-pose创建 t-pose数据
+        self.CreateTPoseData()
+        #根据 T-pose数据生成关节
+        self.CreateJoints()
+        #清理帧， 防止之前残留
+        self.ClearKeys()
         
-    #ImportFromAnimFilePath :直接复制文件路径进去，点击Apply， 或者Browse选择json文件
+    #ImportFromAnimFilePath :直接复制文件路径进去，点击Apply， 或者Browse选择.npz文件
     def OpenImportFileDialog(self, pImportField, *pArgs):
         Path = cmds.fileDialog2(fileFilter='*.npz', dialogStyle=2, fileMode=1, cap='Select Import File')
         if Path:
             cmds.textField(pImportField, edit=True, text=Path[0])
             #print ('Import From Anim File:%s '% (Path))
 
+    #同上
+    def OpenImportTPoseFileDialog(self, pImportField, *pArgs):
+        Path = cmds.fileDialog2(fileFilter='*.npz', dialogStyle=2, fileMode=1, cap='Select Import File')
+        if Path:
+            cmds.textField(pImportField, edit=True, text=Path[0])
+            
+            #print ('Import From Anim File:%s '% (Path))
+
+
     #Browse to load anim data
-    def CreateImportUI(self, pOpenImportFileDialog, pApplyFile):
+    def CreateImportUI(self, pOpenImportFileDialog, pApplyFile, pOpenImportTPoseFileDialog, pApplyTPose):
         if cmds.window(self.WindowId, exists=True):
             cmds.deleteUI(self.WindowId)
         
-        cmds.window(self.WindowId, title=self.WindowTitle, sizeable=False, width=600, height=113 )
+        cmds.window(self.WindowId, title=self.WindowTitle, sizeable=False, resizeToFitChildren = True, width=600, height=113 )
+
+        cmds.columnLayout(adjustableColumn=True, rowSpacing=5)
+        cmds.separator()
+        cmds.text('Work Offline')
+        cmds.separator()
         #cmds.window(self.WindowId, title=self.WindowTitle, sizeable=False, resizeToFitChildren=True )
         
         #columnWidth=[ (1,75)..] means subIndex=1 column with is 75
         #the parameters will fill from 1st row to the last row, 
-        cmds.rowColumnLayout(numberOfColumns=4, columnWidth=[(1, 80),(2, self.EditFieldWidth), (3, 80),(4, 80)], columnOffset=[(1, 'right', 3), 
-                                                                                                            (2, 'right', 3),
-                                                                                                            (3, 'right', 3),
-                                                                                                            (4, 'right', 3)])
-        #make a space row
-        cmds.separator(h=10, style='none')
-        cmds.separator(h=10, style='none')
-        cmds.separator(h=10, style='none')
-        cmds.separator(h=10, style='none')
-
+        cmds.rowColumnLayout(numberOfColumns=5, columnWidth=[(1, 80),(2, self.EditFieldWidth), (3, 80),(4, 80), (5, 80)], 
+                            columnAlign = [(1, 'center'), (2, 'center'), (3, 'center'), (4, 'center'), (5, 'center')],
+                            columnSpacing = [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)],
+                            rowSpacing = [(2, 5), (2, 5), (3, 5), (4, 5), (5, 5)]                              )
+                                                                                                            
         #anim file to apply                                                                    
         cmds.text(label='AnimFile:')
         filePathField = cmds.textField(text='', width = self.EditFieldWidth)
@@ -269,26 +283,45 @@ class ImportAIMotionWithUI(object):
                                                                     filePathField))
         cmds.button(label='ApplyFile', command = functools.partial(pApplyFile,
                                                                     filePathField))
-    
-        #make a space row
-        cmds.separator(h=10, style='none')
-        cmds.separator(h=10, style='none')
-        cmds.separator(h=10, style='none')
-        cmds.separator(h=10, style='none')
-                                                                
-        #these code fill the first rows, from left to right
-        def cancelCallBack(*pArags):
-            if cmds.window(self.WindowId, exists=True):
-                cmds.deleteUI(self.WindowId)
-        cmds.separator(h=10, style='none')
-        cmds.separator(h=10, style='none')
-        cmds.button(label='Cancel', command=cancelCallBack)
-        
-        def resetToDefault(*pArgs):
-            #TODO: reset to default
-            print ('clear the keys')
-            #ClearKeys()
-        cmds.button(label='Reset2TPose', command=resetToDefault)
+
+        def ResetToDefault(*pArgs):
+            if Pose3dTPose.size == 0:
+                self.ErrorMessage('LoadDefaultT-PoseError')
+
+            self.ClearKeys()
+            self.ResetToTPose()
+
+        cmds.button(label='Reset2TPose', command=ResetToDefault)
+
+        cmds.setParent('..')
+        cmds.separator()
+        cmds.text('Work Realtime')
+        cmds.separator()
+
+        cmds.rowColumnLayout(numberOfColumns=6, columnWidth=[(1, 80),(2, self.EditFieldWidth), (3, 80),(4, 80), (5, 95)], 
+                            columnAlign = [(1, 'center'), (2, 'center'), (3, 'center'), (4, 'center'), (5, 'center')],
+                            columnSpacing = [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)],
+                            rowSpacing = [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)] )    
+
+        #anim file to apply                                                                    
+        cmds.text(label='TPoseFile:')
+        tPosefilePathField = cmds.textField(text='', width = self.EditFieldWidth)
+        cmds.button(label='FileBrowser', command = functools.partial(pOpenImportTPoseFileDialog,
+                                                                    tPosefilePathField))
+        cmds.button(label='ApplyT-Pose', command = functools.partial(pApplyTPose,
+                                                                    tPosefilePathField))
+
+        def CreateConnection(*pArgs):
+            self.ListenToFrameData()
+        self.ListenButton = cmds.button(label='CreateConnection', command = CreateConnection)
+
+        # def CloseConnection(*pArgs):
+        #     self.StopListen()
+        # cmds.button(label='CloseConnection', command = CloseConnection)
+
+        cmds.setParent('..')
+        cmds.separator()
+
         cmds.showWindow()
 
     #KeyJointAttribute
@@ -310,6 +343,14 @@ class ImportAIMotionWithUI(object):
         self.KeyJointAttribute(pObjectName, pKeyFrame, 'scaleX', Scale[0])
         self.KeyJointAttribute(pObjectName, pKeyFrame, 'scaleY', Scale[1])
         self.KeyJointAttribute(pObjectName, pKeyFrame, 'scaleZ', Scale[2])
+
+    def ResetToTPose(self):
+         for Index in SkinnedNodesDatas:
+            SkinnNodeData = SkinnedNodesDatas[Index]
+            Name = SkinnNodeData.GetName()
+            PosJoint = SkinnNodeData.GetPositionInTPose()
+            cmds.setAttr('%s.rotate' % (Name), 0, 0, 0, type="double3")
+            cmds.setAttr('%s.translate' % (Name), PosJoint[0], PosJoint[1], PosJoint[2], type="double3")
 
     def ClearKeys(self):
         #删除当前时间线的起始跟结束帧数据
@@ -372,7 +413,7 @@ class ImportAIMotionWithUI(object):
 
         global StartFrame, EndFrame, Progress, ProgressEnd, TotalFrame
         #GroupPose3d.shape:4维  (几个人， 帧数， 关节数目， 关节数据：平移、旋转)
-        TotalFrame = GroupPose3d.shape[1]
+        TotalFrame = 100#GroupPose3d.shape[1]
 
         StartFrame = 0
         EndFrame = TotalFrame - 1
@@ -389,44 +430,6 @@ class ImportAIMotionWithUI(object):
             Len = OM.MVector(Point[0],Point[1], Point[2]).length()
             SkinnedNodesDatas[i].SetJointLength(Len)
             SkinnedNodesDatas[i].SetPositionInTPose(Point)
-
-    #GetTPoseJointPostion
-    #根据关节长度来确定 t-pose时候的 关节坐标
-    def GetTPoseJointPostion(self, JointIndex, JointLength):
-        if JointIndex == 1:#thigh_r
-            return [-JointLength, 0 , 0]
-        elif JointIndex == 2 or JointIndex == 3 or JointIndex == 5 or JointIndex == 6:#calf_r foot_r calf_l foot_l
-            return [0, 0, -JointLength]
-        elif JointIndex == 4:#thigh_l
-            return [JointLength, 0, 0]
-        elif JointIndex == 7 or JointIndex == 8 or JointIndex == 9 or JointIndex == 10:#spine_02 spine_03 neck_01 head
-            return [0, 0, JointLength]
-        elif JointIndex == 11 or JointIndex == 12 or JointIndex == 13:#upperarm_l lowerarm_l hand_l
-            return [JointLength, 0, 0]
-        elif JointIndex == 14 or JointIndex == 15 or JointIndex == 16:#upperarm_r lowerarm_r hand_r
-            return [-JointLength, 0, 0]
-
-    #CreateTPoseDataByFirstFrame
-    #根据第一帧 计算关节长度， 然后创建T-pose关节数据，默认应该是相同的坐标系，并且旋转都是 0 0 0
-    def CreateTPoseDataByFirstFrame(self):
-        #暂时先用 第0帧的数据来计算  t-pose 关节位置
-        JointDatas = Pose3dData[0]
-        
-        for i in range(len(JointDatas)):
-            ParentIndex = SkinnedNodesDatas[i].GetParentIndex()
-            if ParentIndex == -1:
-                SkinnedNodesDatas[i].SetJointLength(0)
-                SkinnedNodesDatas[i].SetPositionInTPose([0, 0, 0])
-            else:
-                #计算 关节的长度  
-                PointStart = self.ConvertPos3dAxisValueToMaya(JointDatas[ParentIndex])
-                PointEnd = self.ConvertPos3dAxisValueToMaya(JointDatas[i])
-
-                Len = OM.MVector(PointEnd[0] - PointStart[0],
-                                PointEnd[1] - PointStart[1],
-                                PointEnd[2] - PointStart[2]).length()
-                SkinnedNodesDatas[i].SetJointLength(Len)
-                SkinnedNodesDatas[i].SetPositionInTPose(self.GetTPoseJointPostion(i, Len))
 
     #CreateJoints
     #根据创建好的 T-pose数据，在maya创建 关节
@@ -550,14 +553,31 @@ class ImportAIMotionWithUI(object):
 
     def ListenToFrameData(self):
         PyPortStr = ':%s'%(ListenPort)
-        if not cmds.commandPort( PyPortStr, q = True):
-            cmds.commandPort(n = PyPortStr, stp = 'python')
+        try:
+            bConnected = cmds.commandPort( PyPortStr, q = True)
+            if not bConnected:
+                cmds.commandPort(n = PyPortStr, stp = 'python')
+                
+        except:
+            cmds.warning('could not open port %s' % PyPortStr)
 
-        MelPortStr = ':%s'%(ListenPort + 1)
-        if not cmds.commandPort( MelPortStr, q = True):
-            cmds.commandPort(n = MelPortStr, stp = 'mel')
+        if bConnected:
+            cmds.button(self.ListenButton, label='Connected', edit=True, backgroundColor=self.ListeningColor)
+        else: 
+            cmds.button(self.ListenButton, label='CreateConnection', edit=True, backgroundColor=self.ListenButtonColor)
 
-        print('Listen to frame Data')
+
+    # def StopListen(self):
+    #     PyPortStr = ':%s'%(ListenPort)
+
+    #     try:
+    #         if cmds.commandPort( PyPortStr, q = True):
+    #             print('founded can close')
+    #             cmds.commandPort(n = PyPortStr, close = True)
+    #     except:
+    #         cmds.warning('could not close port %s' % PyPortStr)
+
+    #     cmds.button(self.ListenButton, label='CreateConnection', edit=True, backgroundColor=self.ListenButtonColor)
 
 
 if __name__ == "__main__":
