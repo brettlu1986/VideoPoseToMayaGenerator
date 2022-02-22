@@ -152,19 +152,10 @@ class ImportAIMotionWithUI(object):
         self.ListeningColor = [0,1,0]
 
 
-    def CheckPyConnectState(self):
-        PyPortStr = ':%s'%(ListenPort)
-        bConnected = cmds.commandPort( PyPortStr, q = True)
-        if bConnected:
-            cmds.button(self.ListenButton, label='Connected', edit=True, backgroundColor=self.ListeningColor)
-        else: 
-            cmds.button(self.ListenButton, label='CreateConnection', edit=True, backgroundColor=self.ListenButtonColor)
-
     def Run(self):
         self.CreateSkinnedNodes()
         self.CreateImportUI(self.OpenImportFileDialog, self.ApplyFile, self.OpenImportTPoseFileDialog, self.ApplyTPoseFile)
         self.CheckPyConnectState()
-
 
     def AddFrameData(self, FrameIndex, FrameData):
         FrameJointDatas = FrameData[0][0]
@@ -374,6 +365,15 @@ class ImportAIMotionWithUI(object):
 
         cmds.playbackOptions(minTime=StartFrame, maxTime=EndFrame, animationStartTime=StartFrame, animationEndTime=EndFrame)
 
+    def CheckPyConnectState(self):
+        PyPortStr = ':%s'%(ListenPort)
+        bConnected = cmds.commandPort( PyPortStr, q = True)
+        if bConnected:
+            cmds.button(self.ListenButton, label='Connected', edit=True, backgroundColor=self.ListeningColor)
+        else: 
+            cmds.button(self.ListenButton, label='CreateConnection', edit=True, backgroundColor=self.ListenButtonColor)
+
+
     def CreateSkinnedNodes(self):
         global SkinnedNodesDatas
         SkinnedNodesDatas = {
@@ -413,7 +413,7 @@ class ImportAIMotionWithUI(object):
 
         global StartFrame, EndFrame, Progress, ProgressEnd, TotalFrame
         #GroupPose3d.shape:4维  (几个人， 帧数， 关节数目， 关节数据：平移、旋转)
-        TotalFrame = 100#GroupPose3d.shape[1]
+        TotalFrame = GroupPose3d.shape[1]
 
         StartFrame = 0
         EndFrame = TotalFrame - 1
@@ -459,6 +459,7 @@ class ImportAIMotionWithUI(object):
 
         Pos = SkinnedNodesDatas[0].GetPositionInTPose()
         cmds.setAttr('%s.translate' % (PelvisName), Pos[0], Pos[1], Pos[2], type="double3")
+        cmds.setAttr('%s.rotate' % (PelvisName), 0, 0, 0, type="double3")
             
         #init other pos in pelvis    
         for Index in SkinnedNodesDatas:
@@ -476,7 +477,8 @@ class ImportAIMotionWithUI(object):
                     cmds.parent(Name, SkinnNodeData.GetParent())
 
                 PosJoint = SkinnNodeData.GetPositionInTPose()
-                cmds.joint(Name, edit=True, relative=True, position=PosJoint)
+                cmds.setAttr('%s.translate' % (Name), PosJoint[0], PosJoint[1], PosJoint[2], type="double3")
+                cmds.setAttr('%s.rotate' % (Name), 0, 0, 0, type="double3")
 
         #generate T-pose data 
         global DefaultTPoseFrameData
@@ -553,14 +555,12 @@ class ImportAIMotionWithUI(object):
 
     def ListenToFrameData(self):
         PyPortStr = ':%s'%(ListenPort)
-        try:
-            bConnected = cmds.commandPort( PyPortStr, q = True)
-            if not bConnected:
-                cmds.commandPort(n = PyPortStr, stp = 'python')
-                
-        except:
-            cmds.warning('could not open port %s' % PyPortStr)
 
+        bConnected = cmds.commandPort( PyPortStr, q = True)
+        if not bConnected:
+            cmds.commandPort(n = PyPortStr, stp = 'python')
+            bConnected = True
+                
         if bConnected:
             cmds.button(self.ListenButton, label='Connected', edit=True, backgroundColor=self.ListeningColor)
         else: 
@@ -569,16 +569,13 @@ class ImportAIMotionWithUI(object):
 
     # def StopListen(self):
     #     PyPortStr = ':%s'%(ListenPort)
-
     #     try:
     #         if cmds.commandPort( PyPortStr, q = True):
     #             print('founded can close')
     #             cmds.commandPort(n = PyPortStr, close = True)
     #     except:
     #         cmds.warning('could not close port %s' % PyPortStr)
-
     #     cmds.button(self.ListenButton, label='CreateConnection', edit=True, backgroundColor=self.ListenButtonColor)
-
 
 if __name__ == "__main__":
     dialog = ImportAIMotionWithUI()
