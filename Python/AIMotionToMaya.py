@@ -455,8 +455,8 @@ class ImportAIMotionWithUI(object):
             cmds.joint(NewNode, e=True, automaticLimits = True, zso=True)
             #默认创建的名字不够规范， 所以 rename一下
             cmds.rename(NewNode, PelvisName)
-            cmds.xform(PelvisName, preserve=True, rotateOrder='yxz')
-
+            
+        cmds.xform(PelvisName, preserve=True, rotateOrder='yxz')
         Pos = SkinnedNodesDatas[0].GetPositionInTPose()
         cmds.setAttr('%s.translate' % (PelvisName), Pos[0], Pos[1], Pos[2], type="double3")
         cmds.setAttr('%s.rotate' % (PelvisName), 0, 0, 0, type="double3")
@@ -471,8 +471,8 @@ class ImportAIMotionWithUI(object):
                     #cmds.joint(NewNode)
                     cmds.joint(NewNode, e=True, zso=True)
                     cmds.rename(NewNode, Name)
-                    cmds.xform(Name, preserve=True, rotateOrder='yxz')
-
+                    
+                cmds.xform(Name, preserve=True, rotateOrder='yxz')
                 if not self.IsWishParent(Name, SkinnNodeData.GetParent(), SkinnNodeData.GetParentType()):
                     cmds.parent(Name, SkinnNodeData.GetParent())
 
