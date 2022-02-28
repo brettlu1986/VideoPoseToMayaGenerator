@@ -2,7 +2,12 @@
 import site
 import importlib
 
-site.addsitedir('D:/Projects/AI/VideoPoseToMayaGenerator/Python')
+import os
+
+RootDir = os.path.dirname(os.path.abspath('.'))
+PyPath = RootDir + '/VideoPoseToMayaGenerator/Python'
+
+site.addsitedir(PyPath)
 
 import AIMotionToMaya 
 importlib.reload(AIMotionToMaya)

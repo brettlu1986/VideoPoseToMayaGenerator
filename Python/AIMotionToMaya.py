@@ -151,7 +151,6 @@ class ImportAIMotionWithUI(object):
         self.ListenButtonColor = [.361,.361,.361]
         self.ListeningColor = [0,1,0]
 
-
     def Run(self):
         self.CreateSkinnedNodes()
         self.CreateImportUI(self.OpenImportFileDialog, self.ApplyFile, self.OpenImportTPoseFileDialog, self.ApplyTPoseFile)
@@ -211,9 +210,9 @@ class ImportAIMotionWithUI(object):
         #根据 T-pose数据生成关节
         self.CreateJoints()
         #创建所有 帧数据
-        self.GenerateFrameJointDatas()
-        #生成关键帧
-        self.GenerateFrames()
+        # self.GenerateFrameJointDatas()
+        # #生成关键帧
+        # self.GenerateFrames()
 
     #ApplyTPoseFile
     def ApplyTPoseFile(self, pImportField, *pArgs):
@@ -336,12 +335,15 @@ class ImportAIMotionWithUI(object):
         self.KeyJointAttribute(pObjectName, pKeyFrame, 'scaleZ', Scale[2])
 
     def ResetToTPose(self):
-         for Index in SkinnedNodesDatas:
+        cmds.setAttr('%s.rotate' % (RootTransformName), RootTransformRot[0], RootTransformRot[1], RootTransformRot[2], type="double3")
+        cmds.setAttr('%s.translate' % (RootTransformName), RootTransformLoc[0], RootTransformLoc[1], RootTransformLoc[2], type="double3")
+        for Index in SkinnedNodesDatas:
             SkinnNodeData = SkinnedNodesDatas[Index]
             Name = SkinnNodeData.GetName()
             PosJoint = SkinnNodeData.GetPositionInTPose()
             cmds.setAttr('%s.rotate' % (Name), 0, 0, 0, type="double3")
             cmds.setAttr('%s.translate' % (Name), PosJoint[0], PosJoint[1], PosJoint[2], type="double3")
+            cmds.xform(Name, preserve=True, rotateOrder='yxz')
 
     def ClearKeys(self):
         #删除当前时间线的起始跟结束帧数据
