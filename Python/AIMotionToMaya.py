@@ -15,17 +15,9 @@ import math
 
 import requests
 from requests.auth import HTTPBasicAuth
-from ftplib import FTP
-import os
 
 import maya.api.OpenMaya as OM
 from maya.api.OpenMaya import MVector, MMatrix, MPoint
-
-#import scp
-#from paramiko import SSHClient
-
-import scp
-
 
 #Config 
 ErrorMsgTypeStr = {
@@ -53,8 +45,6 @@ SkinnedNodesDatas = {}
 RootTransformName = 'SK_Male'
 RootTransformRot = [-90, -90, 0]
 RootTransformLoc = [0, 0, 0]
-
-FTPTarget = None
 
 #Classes
 class JointData:
@@ -263,9 +253,7 @@ class ImportAIMotionWithUI(object):
         if not File or File == '':
             self.ErrorMessage('FileNotNull')
             return
-
-        #self.CheckCurrentTposeData()
-
+        print ('Upload File is :%s '% (File))
 
     # def CheckCurrentTposeData(self):
     #     #假设当前已经导入了 合适的骨架模型， 选中Root
@@ -278,65 +266,6 @@ class ImportAIMotionWithUI(object):
         # SelectRoot = cmds.ls(orderedSelection=True, type='transform')
         # SelectRoot = SelectRoot[0]
         # print('select root :%s' % (SelectRoot))
-
-
-    #FTP 测试 视频上传和 结果下载
-    #print ('Upload File is :%s '% (File))
-
-    #global FTPTarget
-    #这个地方不能加 personal/luzheng类似这样的目录， 否则 ftp会链接不上
-    # FTPTarget = self.FtpConnect('ftp.shiyou.kingsoft.com', 21, 'rog2kfadmin', 'Rog2kingsoft@456@', 2)
-
-    # #模拟上传
-    # if FTPTarget:
-    #     self.FtpUpload(File, '/personal/luzheng/')
-
-    #模拟下载
-    # if FTPTarget:
-    #     FileName = 'pose_meixi_standard_1s2222.npz'
-    #     SaveDir = "D:/Projects/AI/VideoPoseToMayaGenerator/Pose3dNPZ_Files/" + FileName
-    #     self.FtpDownload(FileName, '/personal/luzheng/', SaveDir )
-    def ScpUpload(self, Host, UserName, PassWord, File):
-        #ssh = SSHClient()
-        print('')
-        
-    def FtpConnect(self, Host, Port, UserName, PassWord, DebugLevel):
-        TheFtp = FTP()
-        TheFtp.set_pasv(False)
-        TheFtp.set_debuglevel(DebugLevel)
-        TheFtp.connect(Host, Port)
-        TheFtp.login(UserName, PassWord)
-        return TheFtp
-        
-
-    def FtpUpload(self, UploadFile, RemotePath, DebugLevel = 0):
-        BuffSize = os.path.getsize(UploadFile)
-        Fp = open(UploadFile, 'rb')
-        #测试 显示当前目录
-        #FTPTarget.dir()
-        #链接上来之后，需要先cmd到指定的path
-        FTPTarget.cwd(RemotePath)
-
-        SaveFileName = UploadFile[UploadFile.rfind('/') + 1:]
-        FTPTarget.storbinary('STOR ' + SaveFileName, Fp, BuffSize)
-
-        FTPTarget.set_debuglevel(DebugLevel)
-        FTPTarget.close()
-
-    #FTP lib下载
-    def FtpDownload(self, DoneloadFile, RemotePath, LocalDirectory):
-        Fp = open(LocalDirectory, 'wb')
-
-        FTPTarget.cwd(RemotePath)
-        FTPTarget.retrbinary('RETR ' + DoneloadFile, Fp.write)
-        FTPTarget.close()
-
-        # requests 下载 示例
-        # DowloadUrl = "https://ftp.shiyou.kingsoft.com/personal/luzheng/FF7RE-CLOUD.mp4"
-        # SaveFile = "D:/Projects/AI/VideoPoseToMayaGenerator/Pose3dNPZ_Files/test.mp4"
-        # DownloadResponse = requests.get(DowloadUrl)
-        # with open(SaveFile, 'wb') as f:
-        #     f.write(DownloadResponse.content)
 
     #Browse to load anim data
     def CreateImportUI(self):
