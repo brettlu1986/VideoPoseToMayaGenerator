@@ -8,14 +8,6 @@ __maintainer__ 	= "Lu Zheng"
 __email__ 		= "407851676@gmail.com"
 __status__ 		= "Release"
 
-
-'''
-1.加载 npz, 根据T-pose创建关节
-2.先写 读取 并组织 关键帧数据
-3.起Timer, 大概每30毫秒加载一个关键帧到 maya
-4.或者 走网络传输
-'''
-
 import maya.cmds as cmds
 import functools
 import numpy as np
@@ -29,12 +21,17 @@ import os
 import maya.api.OpenMaya as OM
 from maya.api.OpenMaya import MVector, MMatrix, MPoint
 
+#import scp
+#from paramiko import SSHClient
+
+import scp
 
 
 #Config 
 ErrorMsgTypeStr = {
     'FileNotNull' : 'Dir or File path should not be null.',
     'LoadDefaultT-PoseError' : 'To Load T-Pose, we must import .npz file first.',
+    'NoSk_Male' : 'No Sk_Male imported, import the model first'
 }
 
 DefaultTposeDataFile = 'D:/Projects/AI/VideoPoseToMayaGenerator/Pose3dNPZ_Files/pose_meixi_standard_1s.npz'
@@ -259,28 +256,49 @@ class ImportAIMotionWithUI(object):
             cmds.textField(pImportField, edit=True, text=Path[0])
             print ('Import Video File:%s '% (Path))
 
+
     #上传视频
     def UploadVideo(self, pImportField, *pArgs):
         File = cmds.textField(pImportField, query=True, text=True)
         if not File or File == '':
             self.ErrorMessage('FileNotNull')
             return
-        #print ('Upload File is :%s '% (File))
 
-        global FTPTarget
-        #这个地方不能加 personal/luzheng类似这样的目录， 否则 ftp会链接不上
-        FTPTarget = self.FtpConnect('ftp.shiyou.kingsoft.com', 21, 'rog2kfadmin', 'Rog2kingsoft@456@', 2)
+        #self.CheckCurrentTposeData()
 
-        #模拟上传
-        # if FTPTarget:
-        #     self.FtpUpload(File, '/personal/luzheng/')
 
-        #模拟下载
-        # if FTPTarget:
-        #     FileName = 'pose_meixi_standard_1s2222.npz'
-        #     SaveDir = "D:/Projects/AI/VideoPoseToMayaGenerator/Pose3dNPZ_Files/" + FileName
-        #     self.FtpDownload(FileName, '/personal/luzheng/', SaveDir )
-        
+    # def CheckCurrentTposeData(self):
+    #     #假设当前已经导入了 合适的骨架模型， 选中Root
+    #     try:
+    #         cmds.select(RootTransformName)
+    #     except ValueError as Err:
+            #if Err == 'No object matches name':
+                #self.ErrorMessage('NoSk_Male')
+            
+        # SelectRoot = cmds.ls(orderedSelection=True, type='transform')
+        # SelectRoot = SelectRoot[0]
+        # print('select root :%s' % (SelectRoot))
+
+
+    #FTP 测试 视频上传和 结果下载
+    #print ('Upload File is :%s '% (File))
+
+    #global FTPTarget
+    #这个地方不能加 personal/luzheng类似这样的目录， 否则 ftp会链接不上
+    # FTPTarget = self.FtpConnect('ftp.shiyou.kingsoft.com', 21, 'rog2kfadmin', 'Rog2kingsoft@456@', 2)
+
+    # #模拟上传
+    # if FTPTarget:
+    #     self.FtpUpload(File, '/personal/luzheng/')
+
+    #模拟下载
+    # if FTPTarget:
+    #     FileName = 'pose_meixi_standard_1s2222.npz'
+    #     SaveDir = "D:/Projects/AI/VideoPoseToMayaGenerator/Pose3dNPZ_Files/" + FileName
+    #     self.FtpDownload(FileName, '/personal/luzheng/', SaveDir )
+    def ScpUpload(self, Host, UserName, PassWord, File):
+        #ssh = SSHClient()
+        print('')
         
     def FtpConnect(self, Host, Port, UserName, PassWord, DebugLevel):
         TheFtp = FTP()
@@ -385,10 +403,10 @@ class ImportAIMotionWithUI(object):
 
         cmds.setParent('..')
         cmds.separator()
-        cmds.text('Upload Video Process')
+        cmds.text('Realtime Video or Live Camera Process')
         cmds.separator()
 
-        cmds.rowColumnLayout(numberOfColumns=6, columnWidth=[(1, 80),(2, self.EditFieldWidth), (3, 80),(4, 80), (5, 95)], 
+        cmds.rowColumnLayout(numberOfColumns=6, columnWidth=[(1, 80),(2, self.EditFieldWidth), (3, 80),(4, 80), (5, 90)], 
                             columnAlign = [(1, 'center'), (2, 'center'), (3, 'center'), (4, 'center'), (5, 'center')],
                             columnSpacing = [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)],
                             rowSpacing = [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)] ) 
@@ -400,6 +418,7 @@ class ImportAIMotionWithUI(object):
                                                                     tVideofilePathField))
         cmds.button(label='Upload Video', command = functools.partial(self.UploadVideo,
                                                                     tVideofilePathField))
+
 
         cmds.setParent('..')
         cmds.separator()
