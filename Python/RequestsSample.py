@@ -1,5 +1,29 @@
+# curl -k https://120.92.100.80:8436/predictions/pose_tracker -d "path=/tmp/pose_test.mp4"
+# curl -k https://120.92.100.80:8436/predictions/pose_tracker -T /home/wangwensheng/Downloads/GitLab/GAST-Net-3DPoseEstimation/deploy/test_data/x4.png
+# curl -k https://120.92.100.80:8436/predictions/stylegan -T /home/wangwensheng/Downloads/GitLab/GAST-Net-3DPoseEstimation/deploy/test_data/x3.png
 
 
+#
+# sftp://120.92.14.177  ubuntu  Wws849529..
+# import requests
+# DowloadUrl = "https://ftp.shiyou.kingsoft.com/personal/luzheng/Crazy-Pose_standard_1s233.npz"
+# SaveFile = "D:/Projects/AI/VideoPoseToMayaGenerator/Pose3dNPZ_Files/Crazy-Pose.npz"
+# DownloadResponse = requests.get(DowloadUrl)
+# with open(SaveFile, 'wb') as f:
+#     f.write(DownloadResponse.content)
+
+
+#  D:\ProgrameInstalls\AutoDesk\Maya2022\Maya2022\bin\maya.exe -file Man.mb
+#  echo %PYTHONUSERBASE%
+#  set PYTHONUSERBASE=D:\Projects\AI\VideoPoseToMayaGenerator\EmptyTest
+
+#curl成功 sftp： 关键在于 --insecure,  upload的 sftp地址最后要加对应 remote目录 /
+#curl --insecure --user ubuntu:Wws849529.. -T Crazy-Pose_lz.mp4 sftp://120.92.14.177/tmp/models/results/
+
+
+#curl成功例子 ftp
+#curl -T 1.txt -u "rog2kfadmin:Rog2kingsoft@456@" ftp://ftp.shiyou.kingsoft.com/personal/luzheng/
+#curl -T Crazy-Pose.mp4 -u "rog2kfadmin:Rog2kingsoft@456@" ftp://ftp.shiyou.kingsoft.com/personal/luzheng/
 
 
 # requests 下载 示例， 上传一直没有成功
@@ -68,7 +92,6 @@ def FtpDownload(self, DoneloadFile, RemotePath, LocalDirectory):
 #scp 上传下载  单独再python3.9的系统版本是可行的， 在mayapy 3.7的环境下， import paramiko会崩溃， 原因未知，唉
 '''
 from scp import SCPClient
-
 import paramiko
 from paramiko import SSHClient
 

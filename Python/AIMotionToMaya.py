@@ -8,22 +8,33 @@ __maintainer__ 	= "Lu Zheng"
 __email__ 		= "407851676@gmail.com"
 __status__ 		= "Release"
 
+from concurrent.futures import thread
 import maya.cmds as cmds
 import functools
 import numpy as np
 import math
 
+import subprocess
 import requests
+import os
 from requests.auth import HTTPBasicAuth
 
 import maya.api.OpenMaya as OM
 from maya.api.OpenMaya import MVector, MMatrix, MPoint
+from enum import Enum
+
+import maya.utils as utils
+from collections import deque
+import threading
+import time
+import random
 
 #Config 
 ErrorMsgTypeStr = {
     'FileNotNull' : 'Dir or File path should not be null.',
     'LoadDefaultT-PoseError' : 'To Load T-Pose, we must import .npz file first.',
-    'NoSk_Male' : 'No Sk_Male imported, import the model first'
+    'NoSk_Male' : 'No Sk_Male imported, import the model first',
+    'UploadError' : 'Video Upload Error.'
 }
 
 DefaultTposeDataFile = 'D:/Projects/AI/VideoPoseToMayaGenerator/Pose3dNPZ_Files/pose_meixi_standard_1s.npz'
@@ -43,8 +54,123 @@ Pose3dTPose = np.array([])
 
 SkinnedNodesDatas = {}
 RootTransformName = 'SK_Male'
-RootTransformRot = [-90, -90, 0]
+RootTransformRot = [-90, 90, 0]
 RootTransformLoc = [0, 0, 0]
+
+ProgressMax = 100
+ProgressNearMax = 90
+ExecuteInterval = 1
+ThreadLock = threading.Lock()
+
+class ProcessState(Enum):
+    INIT = 0
+    UPDATE = 1
+    NEAR_COMPLETE = 2
+    COMPLETE = 3
+
+class ProcessFlag(Enum):
+    ONCE = 1
+    PERMANENT = 2
+    KILL = 3
+
+class ProgressTask:
+    def __init__(self, State, Flag, Tip = ''):
+        self.ProcessState = State 
+        self.ProcessFlag = Flag
+        self.StateTip = Tip
+
+class ProgressManager:
+    def __init__(self):
+        self.ProgressBar = None
+
+        self.ProgressText = None
+        self.CurrentProgress = 0
+        self.bRunningProgress = False
+
+        self.ProcessTaskQueue = deque()
+        #当前只能有一个
+        self.PermanentProgressTask = None
+
+    def InitProgressBarUI(self, UIProgressBar, UIProgressText):
+        self.ProgressBar = UIProgressBar
+        self.ProgressText = UIProgressText 
+
+    def UpdateProgress(self):
+        print('progress run 222')
+        #期望一帧不要把所有的 Progress过程都执行完，不然看不到UI表现，一帧执行一个ProgressTask
+        #Premanent的除外
+        ThreadLock.acquire()
+
+        #Task不为空
+        if self.ProcessTaskQueue:
+            ProgressTask = self.ProcessTaskQueue.pop()
+            if ProgressTask.ProcessFlag == ProcessFlag.PERMANENT:
+                self.PermanentProgressTask = ProgressTask
+
+            if ProgressTask.ProcessFlag == ProcessFlag.ONCE:
+                if ProgressTask.ProcessState == ProcessState.INIT:
+                    print('current is init: %s'% ProgressTask.StateTip)
+                    cmds.progressBar(self.ProgressBar, edit=True, progress=0)
+                    cmds.text( self.ProgressText, edit=True, label=ProgressTask.StateTip)
+                    self.CurrentProgress = 0
+                elif ProgressTask.ProcessState == ProcessState.COMPLETE:
+                    print('current is complete once')
+                    cmds.progressBar(self.ProgressBar, edit=True, progress=ProgressMax)
+                    self.PermanentProgressTask = None
+
+            if ProgressTask.ProcessFlag == ProcessFlag.KILL:
+                if ProgressTask.ProcessState == ProcessState.COMPLETE:
+                    print('current is complete in end')
+                    cmds.progressBar(self.ProgressBar, edit=True, progress=ProgressMax)
+                    self.bRunningProgress = False
+                    self.PermanentProgressTask = None
+        
+        if self.PermanentProgressTask:
+
+            if self.PermanentProgressTask.ProcessState == ProcessState.UPDATE:
+                print('current is update')
+                #最多更新到 NearMax， 不更新到100%
+                Num = random.randint(1, 5)
+                if self.CurrentProgress + Num > ProgressNearMax:
+                    Num = ProgressNearMax - self.CurrentProgress if ProgressNearMax > self.CurrentProgress else 0
+                    self.CurrentProgress = ProgressMax
+                else:
+                    self.CurrentProgress = self.CurrentProgress + Num 
+                cmds.progressBar(self.ProgressBar, edit=True, step=Num)
+            elif self.PermanentProgressTask.ProcessState == ProcessState.NEAR_COMPLETE:
+                print('current is near complete')
+                cmds.progressBar(self.ProgressBar, edit=True, progress=ProgressNearMax)
+        ThreadLock.release()
+
+    def ProgressRun(self, Interval,):
+        self.bRunningProgress = True 
+
+        while self.bRunningProgress:
+            print('progress run 111')
+            utils.executeDeferred(self.UpdateProgress)
+            time.sleep(Interval)
+
+    def StartProgress(self):
+        T = threading.Thread(None, target=self.ProgressRun, args = (ExecuteInterval, ))
+        T.start()
+
+    def AddProgressTask(self, ProgressTaskIns):
+        ThreadLock.acquire()
+        self.ProcessTaskQueue.appendleft(ProgressTaskIns)
+        ThreadLock.release()
+
+
+class ProcedureVideo:
+    def __init__(self):
+        print('') 
+
+
+    def ProcessRun(self, VideoFile):
+        print('')
+
+    def StartProcess(self, VideoFile):
+        T = threading.Thread(None, target=self.ProcessRun, args = (ExecuteInterval, VideoFile, ) )
+        T.start()
 
 #Classes
 class JointData:
@@ -145,6 +271,9 @@ class ImportAIMotionWithUI(object):
         self.ListenButtonColor = [.361,.361,.361]
         self.ListeningColor = [0,1,0]
 
+        self.ProgressManager = ProgressManager()
+        self.ProcedureVideo = ProcedureVideo()
+
     def Run(self):
         self.CreateSkinnedNodes()
         self.CreateImportUI()
@@ -189,13 +318,9 @@ class ImportAIMotionWithUI(object):
         cmds.confirmDialog(title='Error Message', message=ErrorMsgTypeStr[KeyMsg], button=['Ok'])
         print ("ErrorMsg: %s" % (ErrorMsgTypeStr[KeyMsg])  )
 
-    #ApplyFile
-    def ApplyFile(self, pImportField, *pArgs):
-        File = cmds.textField(pImportField, query=True, text=True)
-        if not File or File == '':
-            self.ErrorMessage('FileNotNull')
-            return
-        #print ('Apply File: %s' % File  )   
+
+    def ApplyNpzFile(self, File):
+        print('apply npz file')
         global Pose3dData, Pose3dTPose
         Pose3dData, Pose3dTPose = self.LoadPose3dData(File)
 
@@ -204,9 +329,18 @@ class ImportAIMotionWithUI(object):
         #根据 T-pose数据生成关节
         self.CreateJoints()
         #创建所有 帧数据
-        # self.GenerateFrameJointDatas()
-        # #生成关键帧
-        # self.GenerateFrames()
+        self.GenerateFrameJointDatas()
+        #生成关键帧
+        self.GenerateFrames()
+
+    #ApplyFile
+    def ApplyFile(self, pImportField, *pArgs):
+        File = cmds.textField(pImportField, query=True, text=True)
+        if not File or File == '':
+            self.ErrorMessage('FileNotNull')
+            return
+        #print ('Apply File: %s' % File  )   
+        self.ApplyNpzFile(File)
 
     #ApplyTPoseFile
     def ApplyTPoseFile(self, pImportField, *pArgs):
@@ -246,14 +380,93 @@ class ImportAIMotionWithUI(object):
             cmds.textField(pImportField, edit=True, text=Path[0])
             print ('Import Video File:%s '% (Path))
 
-
     #上传视频
     def UploadVideo(self, pImportField, *pArgs):
         File = cmds.textField(pImportField, query=True, text=True)
         if not File or File == '':
             self.ErrorMessage('FileNotNull')
             return
-        print ('Upload File is :%s '% (File))
+        
+        self.ProcedureVideo.StartProcess(File)
+        self.ProgressManager.StartProgress()
+
+        # VideoFile = File[File.rfind('/') + 1:]
+        # VideoName = VideoFile.split('.')[0]
+
+        # BaseIp = '120.92.33.226'
+        # RemoteSavePath = '/tmp/models/results/'
+        # UploadHost = 'sftp://%s%s' % (BaseIp,RemoteSavePath)
+        # UserName = 'ubuntu'
+        # Password = 'Wws849529..'
+        
+        #1. upload
+        #加上进度条就在 command最后面 加 --progress-bar
+        #self.ProgressManager.StartProgress()
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.INIT, ProcessFlag.ONCE, 'Upload Video'))
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.UPDATE, ProcessFlag.PERMANENT))
+
+        # print('begin upload@')
+        # try:
+        #     UploadCommand = 'curl --insecure --user %s:%s -T %s %s' % (UserName,Password,File,UploadHost)
+        #     p = subprocess.Popen(UploadCommand, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        #     out, info = p.communicate()
+        # except: 
+        #     self.ErrorMessage('UploadError')
+        # else:
+        #     print('begin endupload')
+
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.NEAR_COMPLETE, ProcessFlag.PERMANENT))
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.COMPLETE, ProcessFlag.ONCE))
+  
+        #2. send remote upload video file path to notify server can process
+        #print('begin progress')
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.INIT, ProcessFlag.ONCE, 'Process Video'))
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.UPDATE, ProcessFlag.PERMANENT))
+
+        # RemoteUploadPath = RemoteSavePath + VideoFile
+        # ProcessVideoHost = 'https://%s:8436/predictions/pose_tracker' % BaseIp
+        # Response = requests.post(ProcessVideoHost, data = {'path':RemoteUploadPath}, verify=False)
+
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.NEAR_COMPLETE, ProcessFlag.PERMANENT))
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.COMPLETE, ProcessFlag.ONCE))
+        #print('Response.text:: %s' % Response.text)
+
+        #3.download npz file
+        # Content = Response.text.split(":")
+        # SubIndex = Content[1].find(' ')
+        # DownloadPath = Content[1][:SubIndex]
+        # ExtraPath = '_standard/bvh/%s_standard_1s.npz' % VideoName
+        # DownloadNpzHost = "https://%s:%s%s" % (BaseIp, DownloadPath, ExtraPath)
+        # print('DownloadNpzHost:%s' % DownloadNpzHost)
+        #print('begin download')            
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.INIT, ProcessFlag.ONCE, 'Download Bin'))
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.UPDATE, ProcessFlag.PERMANENT))
+
+        #DownloadNpzHost = 'http://%s:8433/%s_standard/bvh/%s_standard_1s.npz' % (BaseIp, VideoName, VideoName)
+        #'http://120.92.14.177:8433/Crazy-Pose_lz_standard/bvh/Crazy-Pose_lz_standard_1s.npz'
+        #'http://120.92.14.177:8433/tmp/models/results/Crazy-Pose_lz_standard/bvh/Crazy-Pose_lz_standard_1s.npz'
+        # RootDir = os.path.dirname(os.path.abspath('.'))
+        # SaveFile = RootDir + '/VideoPoseToMayaGenerator/Pose3dNPZ_Files/%s_standard_1s.npz' %(VideoName)
+
+        # DownloadResponse = requests.get(DownloadNpzHost)
+        # with open(SaveFile, 'wb') as f:
+        #     f.write(DownloadResponse.content)
+
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.NEAR_COMPLETE, ProcessFlag.PERMANENT))
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.COMPLETE, ProcessFlag.ONCE))
+
+        #print('download success') 
+        #print(DownloadResponse.text)
+
+        #4. apply download file
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.INIT, ProcessFlag.ONCE, 'Generate Frame'))
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.UPDATE, ProcessFlag.PERMANENT))
+
+        #self.ApplyNpzFile(SaveFile)
+
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.NEAR_COMPLETE, ProcessFlag.PERMANENT))
+        # self.ProgressManager.AddProgressTask(ProgressTask(ProcessState.COMPLETE, ProcessFlag.KILL))
+        
 
     # def CheckCurrentTposeData(self):
     #     #假设当前已经导入了 合适的骨架模型， 选中Root
@@ -348,6 +561,18 @@ class ImportAIMotionWithUI(object):
         cmds.button(label='Upload Video', command = functools.partial(self.UploadVideo,
                                                                     tVideofilePathField))
 
+        cmds.setParent('..')
+        cmds.separator()
+
+        cmds.rowColumnLayout(numberOfColumns=6, columnWidth=[(1, 120),(2, self.EditFieldWidth), (3, 80),(4, 80), (5, 90)], 
+                            columnAlign = [(1, 'center'), (2, 'center'), (3, 'center'), (4, 'center'), (5, 'center')],
+                            columnSpacing = [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)],
+                            rowSpacing = [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)] ) 
+
+
+        ProgressText = cmds.text(label='Current Progress:')
+        CurrentProgressBar = cmds.progressBar(maxValue=ProgressMax, width=500)
+        self.ProgressManager.InitProgressBarUI(CurrentProgressBar, ProgressText)
 
         cmds.setParent('..')
         cmds.separator()
@@ -567,7 +792,10 @@ class ImportAIMotionWithUI(object):
         CurrentFrameDatas = []
         for i in range(TotalFrame):
             Progress += 1.0
-            print ('FrameData Progress:: %.1f%%' % (Progress / ProgressEnd * 100))
+            
+            #Num = Progress / ProgressEnd * 100
+            #print ('FrameData Progress:: %.1f%%' % (Num))
+            
             JointDatas = Pose3dData[0][i]
             Frame = self.GenerateFrameJoint(JointDatas, i)
             CurrentFrameDatas.append(Frame)
@@ -592,7 +820,10 @@ class ImportAIMotionWithUI(object):
         #generate frame key
         for Frame in CurrentFrameDatas:
             Progress += 1.0
-            print ('AnimKey Process:: %.1f%%' % (Progress / ProgressEnd * 100))
+            #print ('AnimKey Process:: %.1f%%' % (Progress / ProgressEnd * 100))
+
+            #Num = Progress / ProgressEnd * 100
+            #cmds.progressBar(self.CurrentProgressBar, edit=True, progress=Num)
             self.ConstructFrame(Frame)
 
     def ListenToFrameData(self):
