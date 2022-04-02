@@ -1,55 +1,62 @@
-import site
+
+import site 
 import importlib
 
-
 import os
-
 RootDir = os.path.dirname(os.path.abspath('.'))
 PyPath = RootDir + '/VideoPoseToMayaGenerator/Python'
-
 site.addsitedir(PyPath)
 
+import AiMotionCore as MotionCore 
+import AIMotionToMaya
+import ProcedureVideo
 
-import AIMotionToMaya 
+importlib.reload(MotionCore)
 importlib.reload(AIMotionToMaya)
+importlib.reload(ProcedureVideo)
+
+MotionCoreIns = MotionCore.AiMotionCore()
+
+MotionToMaya = MotionCoreIns.GetProcessMotionMaya()
+MotionToMaya.Run()
 
 
-MotionIns = AIMotionToMaya.ImportAIMotionWithUI()
-MotionIns.Run()
 
+# def argsFunc(*my_args):
+# 	print(my_args[0]) 
+
+# argsFunc(1, 2, 3)
+
+
+#below is test
 # import threading
 # import time
 # import subprocess
+#from pyqtgraph.Qt import QtCore
 
 # def Update1(Interval):
-
-#     print('begin upload')
-#     BaseIp = '120.92.33.226'
-#     RemoteSavePath = '/tmp/models/results/'
-#     UploadHost = 'sftp://%s%s' % (BaseIp,RemoteSavePath)
-#     UserName = 'ubuntu'
-#     Password = 'Wws849529..'
-
-#     File = 'D:/Projects/AI/GAST-Net-3DPoseEstimation/video/Pure-Land-female1.mp4'
-#     UploadCommand = 'curl --insecure --user %s:%s -T %s %s' % (UserName,Password,File,UploadHost)
-#     p = subprocess.Popen(UploadCommand, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-#     out, info = p.communicate()
-#     print('end upload')
 #     while True:
 #         print('111')
 #         time.sleep(Interval)
 
-# def Update2(Interval):
-#     while True: 
-#         print('222')
-#         time.sleep(Interval)
+# # def Update2(Interval):
+# #     while True: 
+# #         print('222')
+# #         time.sleep(Interval)
         
 
 # T1 = threading.Thread(None, target=Update1, args = (1, ))
 # T1.start()
 
-# T2 = threading.Thread(None, target=Update2, args = (1, ))
-# T2.start()
+# # T2 = threading.Thread(None, target=Update2, args = (1, ))
+# # T2.start()
+
+# def Update3():
+#     print('333')
+
+# timer = QtCore.QTimer()
+# timer.timeout.connect(Update3)
+# timer.start(1000)
 
 
 
