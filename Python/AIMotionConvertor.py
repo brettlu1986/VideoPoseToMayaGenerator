@@ -11,6 +11,7 @@ import AiMotionCore as MotionCore
 import AIMotionToMaya
 import ProcedureVideo
 
+#maya issue: 不Reload的话 Python路径下的 Python代码修改会无效
 importlib.reload(MotionCore)
 importlib.reload(AIMotionToMaya)
 importlib.reload(ProcedureVideo)
