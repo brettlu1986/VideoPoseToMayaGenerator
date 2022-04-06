@@ -5,7 +5,7 @@ __copyright__ 	= "Copyright 2022, Lu Zheng"
 __credits__ 	= ["Lu Zheng"]
 __version__ 	= "1.0.0"
 __maintainer__ 	= "Lu Zheng"
-__email__ 		= "407851676@gmail.com"
+__email__ 		= "luzheng2@kingsoft.com"
 __status__ 		= "Release"
 
 from concurrent.futures import thread

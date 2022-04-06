@@ -16,7 +16,6 @@ class ProcedureVideo:
         self.VideoFile = None
 
     def ProcessRun(self, Interval, File):
-        print('video process run')
         VideoFile = File[File.rfind('/') + 1:]
         VideoName = VideoFile.split('.')[0]
 
@@ -33,7 +32,7 @@ class ProcedureVideo:
         MotionToMaya.AddProcessTask('ProgressBar', ProcessState.INIT, ProcessFlag.ONCE, 'Upload Video')
         MotionToMaya.AddProcessTask('ProgressBar', ProcessState.UPDATE, ProcessFlag.PERMANENT, '')
 
-        print('begin upload@')
+        print('begin upload')
         try:
             UploadCommand = 'curl --insecure --user %s:%s -T %s %s' % (UserName,Password,File,UploadHost)
             p = subprocess.Popen(UploadCommand, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -41,13 +40,12 @@ class ProcedureVideo:
         except: 
             self.ErrorMessage('UploadError')
         else:
-            print('begin endupload')
+            print('upload end')
 
         MotionToMaya.AddProcessTask('ProgressBar', ProcessState.NEAR_COMPLETE, ProcessFlag.PERMANENT, '')
         MotionToMaya.AddProcessTask('ProgressBar', ProcessState.COMPLETE, ProcessFlag.ONCE, '')
   
         #2. send remote upload video file path to notify server can process
-        print('begin progress')
         MotionToMaya.AddProcessTask('ProgressBar', ProcessState.INIT, ProcessFlag.ONCE, 'Process Video')
         MotionToMaya.AddProcessTask('ProgressBar', ProcessState.UPDATE, ProcessFlag.PERMANENT, '')
 
@@ -66,7 +64,6 @@ class ProcedureVideo:
         ExtraPath = '_standard/bvh/%s_standard_1s.npz' % VideoName
         DownloadNpzHost = "https://%s:%s%s" % (BaseIp, DownloadPath, ExtraPath)
         print('DownloadNpzHost:%s' % DownloadNpzHost)
-        print('begin download')            
 
         MotionToMaya.AddProcessTask('ProgressBar', ProcessState.INIT, ProcessFlag.ONCE, 'Download Bin')
         MotionToMaya.AddProcessTask('ProgressBar', ProcessState.UPDATE, ProcessFlag.PERMANENT,'')
@@ -83,8 +80,6 @@ class ProcedureVideo:
 
         MotionToMaya.AddProcessTask('ProgressBar', ProcessState.NEAR_COMPLETE, ProcessFlag.PERMANENT,'')
         MotionToMaya.AddProcessTask('ProgressBar', ProcessState.COMPLETE, ProcessFlag.ONCE,'')
-
-        print('download success') 
         print(DownloadResponse.text)
 
         #4.apply download file
