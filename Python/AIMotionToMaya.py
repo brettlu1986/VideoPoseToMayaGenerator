@@ -8,7 +8,6 @@ __maintainer__ 	= "Lu Zheng"
 __email__ 		= "luzheng2@kingsoft.com"
 __status__ 		= "Release"
 
-from concurrent.futures import thread
 import maya.cmds as cmds
 import functools
 import numpy as np
@@ -20,7 +19,6 @@ from enum import Enum
 
 from collections import deque
 import threading
-import time
 import random
 from pyqtgraph.Qt import QtCore
 
@@ -34,6 +32,7 @@ ErrorMsgTypeStr = {
     'UploadError' : 'Video Upload Error.'
 }
 
+#监听 发送到Maya的代码指令 执行
 ListenPort = 7001
 
 StartFrame = 0
@@ -45,37 +44,44 @@ TotalFrame = 0
 CurrentFrameDatas = []#每帧Frame一帧的关节数据
 DefaultTPoseFrameData = None
 
+#存放 解析的 动作关节数据
 Pose3dData = np.array([])
+#存放 创建的T-pose关节数据
 Pose3dTPose = np.array([])
 
+#Root Transform 节点的位置和旋转
 SkinnedNodesDatas = {}
 RootTransformName = 'SK_Male'
 RootTransformRot = [-90, 90, 0]
 RootTransformLoc = [0, 0, 0]
 
+#用于表现当前 视频处理进度的 进度条
 ProgressMax = 100
 ProgressNearMax = 90
 ExecuteInterval = 1
 ThreadLock = threading.Lock()
 
-
+#主要用于 视频的上传-》处理-》下载流程 
+#每一步基本都有 初始化-》更新-》完成 几个阶段
 class ProcessState(Enum):
     INIT = 0
     UPDATE = 1
     NEAR_COMPLETE = 2
     COMPLETE = 3
 
+#标记， Once代表执行一次， PERMANENT代表会持续执行，KILL代表直接结束
 class ProcessFlag(Enum):
     ONCE = 1
     PERMANENT = 2
     KILL = 3
 
+#Task 处理任务，当前设计不够通用， 先这么地吧
 class ProcessTask:
     def __init__(self, TaskName, *TaskParams ):
         self.TaskName = TaskName
         self.TaskParams = TaskParams[0] 
         
-#Classes
+#Classes   关节数据
 class JointData:
     def __init__(self, Name, Translate, Rotate, Scale):
         self.JointName = Name
@@ -104,6 +110,7 @@ class JointData:
     def Display(self):
         print ('JointData: %s, %s, %s, %s' % (self.JointName, self.Translate, self.Rotate, self.Scale))
 
+#帧数据， 主要用于存放 每一帧的关节数据
 class FrameData:
     def __init__(self, FrameIndex, JointDatas):
         self.FrameIndex = FrameIndex 
@@ -120,7 +127,8 @@ class FrameData:
         for key in self.JointDatas:
             Joint = self.JointDatas[key]
             Joint.Display()
-        
+
+#代表当前 Skinned节点数据，记录父子关系等       
 class SkinnedNodeData:
     def __init__(self, _Name, _Type, _ParentName, _ParentType, _ParentIndex):
         self.Name = _Name
@@ -162,6 +170,7 @@ class SkinnedNodeData:
     def Display(self):
         print ('%s parent is %s,type is %s' % (self.Name, self.Parent, self.Type))
 
+#主要处理类，主要是 ui相关的处理流程都在这
 class ImportAIMotionWithUI(object):
 
     def __init__(self):
@@ -185,15 +194,18 @@ class ImportAIMotionWithUI(object):
         #当前只能有一个
         self.PermanentProgressTask = None
         self.ExcuteTimer = None
+        
 
+    #主要是用于 CommandPort通信，通过CommandPort发送代码参数过来
     def AddFrameData(self, FrameIndex, FrameData):
+        
         FrameJointDatas = FrameData[0][0]
 
         Frame = self.GenerateFrameJoint(FrameJointDatas, FrameIndex)
         self.ConstructFrame(Frame)
         CurrentFrameDatas.append(Frame)
 
-    #util functions
+    #util functions 
     def LimitAngle(self, Angle):
         if Angle > 180:
             return Angle - 360 
@@ -213,10 +225,12 @@ class ImportAIMotionWithUI(object):
         multiplier = 10 ** decimals
         return math.ceil(n * multiplier) / multiplier
 
+    #需要对 Pose3d的 旋转顺序进行转换
     def ConvertPos3dRotateToMaya(self, JointValue):
         NewRot = [self.RoundHalfUp(JointValue[3], 3) , self.RoundHalfUp(JointValue[4], 3), self.RoundHalfUp(JointValue[5], 3)]
         return [NewRot[1], NewRot[2], NewRot[0]]
 
+    #Pose3d 坐标转换
     def ConvertPos3dAxisValueToMaya(self, JointValue):
         return [self.RoundHalfUp(JointValue[0], 3), self.RoundHalfUp(JointValue[1], 3), self.RoundHalfUp(JointValue[2], 3)]
 
@@ -288,6 +302,7 @@ class ImportAIMotionWithUI(object):
             cmds.textField(pImportField, edit=True, text=Path[0])
             print ('Import Video File:%s '% (Path))
 
+    #进度任务 处理
     def UpdateProcess(self):
         if not self.bRunningProgress:
             return 
@@ -345,6 +360,7 @@ class ImportAIMotionWithUI(object):
         self.CreateImportUI()
         self.CheckPyConnectState()
 
+    #起本地的 处理更新流程，主要用于update进度条
     def StartProcess(self):
         self.bRunningProgress = True 
         if not self.ExcuteTimer:
@@ -353,6 +369,7 @@ class ImportAIMotionWithUI(object):
 
         self.ExcuteTimer.start(ExecuteInterval * 1000)
 
+    #添加 处理任务
     def AddProcessTask(self, TaskName, *TaskParams):
         ThreadLock.acquire()
         print('task name %s %s' % (TaskName, TaskParams))
@@ -360,7 +377,7 @@ class ImportAIMotionWithUI(object):
         ThreadLock.release()
         
 
-    #上传视频
+    #上传视频，创建视频上传下载线程
     def UploadVideo(self, pImportField, *pArgs):
         
         File = cmds.textField(pImportField, query=True, text=True)
@@ -384,12 +401,13 @@ class ImportAIMotionWithUI(object):
         # SelectRoot = SelectRoot[0]
         # print('select root :%s' % (SelectRoot))
 
+    #当前Window关闭，需要把TimerStop
     def WindowClose(self):
         self.bRunningProgress = False
         if self.ExcuteTimer:
             self.ExcuteTimer.stop()
 
-    #Browse to load anim data
+    #代码创建UI的逻辑 都在这里
     def CreateImportUI(self):
         if cmds.window(self.WindowId, exists=True):
             cmds.deleteUI(self.WindowId)
@@ -487,26 +505,30 @@ class ImportAIMotionWithUI(object):
 
         cmds.showWindow()
 
-    #KeyJointAttribute
+    #KeyJointAttribute 创建关节属性关键帧
     def KeyJointAttribute(self, pObjectName, pKeyFrame, pAttribute, value):    
         cmds.setKeyframe(pObjectName, time=pKeyFrame, attribute=pAttribute, value=value)
         cmds.keyTangent(inTangentType='linear', outTangentType='linear')
             
+    #创建关节 位移
     def KeyJointTranslate(self, pObjectName, pKeyFrame, Translate):   
         self.KeyJointAttribute(pObjectName, pKeyFrame, 'translateX', Translate[0])
         self.KeyJointAttribute(pObjectName, pKeyFrame, 'translateY', Translate[1])
         self.KeyJointAttribute(pObjectName, pKeyFrame, 'translateZ', Translate[2])
 
+    #创建关节 旋转
     def KeyJointRotate(self, pObjectName, pKeyFrame, Rotate):
         self.KeyJointAttribute(pObjectName, pKeyFrame, 'rotateX', Rotate[0])
         self.KeyJointAttribute(pObjectName, pKeyFrame, 'rotateY', Rotate[1])
         self.KeyJointAttribute(pObjectName, pKeyFrame, 'rotateZ', Rotate[2])
 
+    #创建关节 缩放
     def KeyJointScale(self, pObjectName, pKeyFrame, Scale):
         self.KeyJointAttribute(pObjectName, pKeyFrame, 'scaleX', Scale[0])
         self.KeyJointAttribute(pObjectName, pKeyFrame, 'scaleY', Scale[1])
         self.KeyJointAttribute(pObjectName, pKeyFrame, 'scaleZ', Scale[2])
 
+    #重置T-pose数据
     def ResetToTPose(self):
         cmds.setAttr('%s.rotate' % (RootTransformName), RootTransformRot[0], RootTransformRot[1], RootTransformRot[2], type="double3")
         cmds.setAttr('%s.translate' % (RootTransformName), RootTransformLoc[0], RootTransformLoc[1], RootTransformLoc[2], type="double3")
@@ -518,6 +540,7 @@ class ImportAIMotionWithUI(object):
             cmds.setAttr('%s.translate' % (Name), PosJoint[0], PosJoint[1], PosJoint[2], type="double3")
             cmds.xform(Name, preserve=True, rotateOrder='yxz')
 
+    #清理 所有帧数据
     def ClearKeys(self):
         #删除当前时间线的起始跟结束帧数据
         StartTime = cmds.playbackOptions(query=True, minTime=True)
@@ -540,6 +563,7 @@ class ImportAIMotionWithUI(object):
 
         cmds.playbackOptions(minTime=StartFrame, maxTime=EndFrame, animationStartTime=StartFrame, animationEndTime=EndFrame)
 
+    #检查当前CommandPort连接状态
     def CheckPyConnectState(self):
         PyPortStr = ':%s'%(ListenPort)
         bConnected = cmds.commandPort( PyPortStr, q = True)
@@ -548,7 +572,7 @@ class ImportAIMotionWithUI(object):
         else: 
             cmds.button(self.ListenButton, label='CreateConnection', edit=True, backgroundColor=self.ListenButtonColor)
 
-
+    #创建 关节节点树
     def CreateSkinnedNodes(self):
         global SkinnedNodesDatas
         SkinnedNodesDatas = {
@@ -581,6 +605,7 @@ class ImportAIMotionWithUI(object):
             return True
         return False
 
+    #加载Npz文件， 初始化Npz数据
     def LoadPose3dData(self, Pose3dPath):
         Pose3dNpz = np.load(Pose3dPath)
         GroupPose3d = Pose3dNpz['n_frames_3d']
@@ -672,6 +697,7 @@ class ImportAIMotionWithUI(object):
             CurrentJointDatas[JointName] = Joint
         DefaultTPoseFrameData = FrameData(-1, CurrentJointDatas)
 
+    #生成  帧关节数据
     def GenerateFrameJoint(self, JointDatas, FrameIndex):          
         FrameJointDatas = {}
         global DefaultTPoseFrameData
@@ -693,6 +719,7 @@ class ImportAIMotionWithUI(object):
         
         return FrameData(FrameIndex, FrameJointDatas)
 
+    #读取所有帧数据
     def GenerateFrameJointDatas(self):
         global Progress, ProgressEnd, TotalFrame, CurrentFrameDatas
         cmds.select( d=True )
@@ -708,6 +735,7 @@ class ImportAIMotionWithUI(object):
             Frame = self.GenerateFrameJoint(JointDatas, i)
             CurrentFrameDatas.append(Frame)
 
+    #根据帧数据 生成maya关键帧
     def ConstructFrame(self, Frame):
         FrameIndex = Frame.GetFrameIndex()  
         JointDatas = Frame.GetJointDatas()
@@ -719,6 +747,7 @@ class ImportAIMotionWithUI(object):
                 self.KeyJointRotate(JointName, FrameIndex, Joint.GetRotate())
                 self.KeyJointScale(JointName, FrameIndex, Joint.GetScale())
 
+    #生成 maya关键帧
     def GenerateFrames(self):
         #清理遗留关键帧
         self.ClearKeys()
@@ -733,6 +762,7 @@ class ImportAIMotionWithUI(object):
             cmds.progressBar(self.ProgressBar, edit=True, progress=Num)
             self.ConstructFrame(Frame)
 
+    #监听 CommandPort指令输入
     def ListenToFrameData(self):
         PyPortStr = ':%s'%(ListenPort)
 

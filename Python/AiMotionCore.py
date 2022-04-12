@@ -2,6 +2,7 @@
 import ProcedureVideo as VideoProcess
 import AIMotionToMaya as AIMotionMaya
 
+#主要用于全局访问的 一个单例
 class AiMotionCore:
 
     init_flag = False

@@ -10,6 +10,7 @@ from AIMotionToMaya import ProcessFlag
 
 ExecuteInterval = 1
 
+#主要用于 处理视频上传-》处理-》下载流程的线程类
 class ProcedureVideo:
 
     def __init__(self):
